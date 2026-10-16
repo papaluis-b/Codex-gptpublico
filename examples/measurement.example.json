@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "syntheticExample": true,
+  "id": "example-not-a-real-measurement",
+  "type": "delay",
+  "createdAt": "2026-10-15T12:12:31Z",
+  "timezone": "Europe/Madrid",
+  "session": "Ejemplo ficticio",
+  "position": "FOH",
+  "appVersion": "not-built",
+  "algorithmVersion": "proposal-v1",
+  "device": {
+    "targetModel": "Samsung Galaxy S24 Ultra",
+    "androidVersion": null,
+    "oneUiVersion": null
+  },
+  "audio": {
+    "requestedInput": "built-in microphone",
+    "requestedOutput": "USB DAC",
+    "activeInput": null,
+    "activeOutput": null,
+    "routingVerified": false,
+    "actualInputSampleRate": null,
+    "actualOutputSampleRate": null,
+    "unprocessedSupportDeclared": null,
+    "processingVerifiedAbsent": false,
+    "timestampStatus": "not-tested",
+    "discontinuities": null
+  },
+  "stimulus": {
+    "kind": "short-chirp",
+    "parametersStatus": "example-only",
+    "file": "stimulus.wav",
+    "sha256": null
+  },
+  "capture": {
+    "file": "capture.wav",
+    "sha256": null
+  },
+  "result": {
+    "observedDelayMs": 45.0,
+    "compensationMs": null,
+    "compensatedDelayMs": null,
+    "timingMethod": "synthetic-example",
+    "arrivalDefinition": "correlation-peak",
+    "repeatResultsMs": [44.8, 45.0, 45.1, 44.9, 45.0],
+    "medianMs": 45.0,
+    "dispersionMs": null,
+    "qualityStatus": "synthetic-not-validated",
+    "flags": ["NO_REAL_AUDIO", "NO_ABSOLUTE_CALIBRATION"],
+    "calibrationProfileId": null
+  },
+  "notes": "Los WAV citados no se incluyen: ejemplo de estructura, no captura real."
+}
