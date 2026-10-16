@@ -1,4 +1,4 @@
-# Decisiones de la primera versión
+# Decisiones de implementación
 
 ## 2026-10-16 · H0/H1, SONDA 0.1.0
 
@@ -51,3 +51,11 @@ La última ventana espectral disponible se exporta en CSV si pertenece a la grab
 - [AudioTimestamp](https://developer.android.com/reference/android/media/AudioTimestamp)
 
 Las pruebas en JVM y la generación de un APK no validan el S24 Ultra ni el DAC. El informe de esta entrega se mantiene en `11_ESTADO_H0_H1.md`.
+
+## 2026-10-16 · SONDA 0.2.0, generador por fracciones de octava
+
+Se incorporan las modificaciones solicitadas: pasos seleccionables de 1/3, 1/24, 1/32 y 1/48 de octava y elección entre seno y ruido rosa en campanas de esa anchura. Se usan razones binarias exactas desde la frecuencia actual. No se presentan como frecuencias preferidas ni filtros certificados IEC.
+
+La campana es un paso banda Butterworth de orden total 4, con bordes a −3 dB y caída gradual. Se normaliza el ruido a un RMS objetivo independiente de la anchura; el nivel del seno sigue referido a pico. El ruido se limita a −24 dBFS RMS y el seno a −12 dBFS pico. El diseño y la calibración de coeficientes se realizan fuera del hilo de salida. El cambio de campana pasa por ganancia cero con rampas de 20 ms; cambiar de seno a ruido o viceversa exige volver a pulsar Emitir.
+
+Los metadatos añaden tipo, fracción, bordes, referencia de nivel, algoritmo, semilla y clipping del generador. El WAV sigue siendo la captura original del micrófono. La simulación conserva su señal sintética fija de 1 kHz y no reproduce la selección del generador ni emite audio. Funcionamiento, fuentes, pruebas y pendientes de 0.2 en `12_GENERADOR_FRACCIONES_Y_ROSA.md`.

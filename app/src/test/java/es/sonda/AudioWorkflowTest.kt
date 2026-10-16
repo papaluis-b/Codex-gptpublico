@@ -17,6 +17,9 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.security.MessageDigest
 import java.util.zip.ZipFile
+import es.sonda.dsp.PinkNoise
+import es.sonda.dsp.SignalKind
+import kotlin.math.pow
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -95,6 +98,55 @@ class AudioWorkflowTest {
         Thread.sleep(500)
         assertFalse(engine.state.value.running)
         assertFalse(engine.state.value.preparing)
+        assertFalse(engine.state.value.emitting)
+    }
+
+    @Test fun pinkBandSettingsSurviveOpeningAndAreExportedWithRmsReference() {
+        engine.setOctaveDivision(48)
+        engine.setSignalKind(SignalKind.PINK_NOISE)
+        engine.setTone(1000.0, -32.0)
+        engine.start(null, true)
+        await { engine.state.value.running && engine.analysis.value != null }
+        assertEquals(SignalKind.PINK_NOISE, engine.state.value.signalKind)
+        assertEquals(48, engine.state.value.octaveDivision)
+        assertEquals(-32.0, engine.state.value.levelDbFs, 0.0)
+        assertFalse(engine.state.value.emitting)
+        engine.toggleRecording()
+        await { engine.state.value.recording }
+        Thread.sleep(350)
+        engine.toggleRecording()
+        await { store.list().isNotEmpty() && !engine.state.value.recording }
+        ZipFile(store.export(store.list().single().id)).use { zip ->
+            val json = JSONObject(zip.getInputStream(zip.getEntry("measurement.json")).reader().readText())
+            val audio = json.getJSONObject("audioAtStart")
+            val generator = audio.getJSONObject("generator")
+            assertTrue(audio.isNull("generatorLevelDbFsPeak"))
+            assertEquals(-32.0, audio.getDouble("generatorLevelDbFsRms"), 0.0)
+            assertEquals("PINK_NOISE", generator.getString("kind"))
+            assertEquals(48, generator.getInt("octaveDivision"))
+            assertEquals(1000.0 / 2.0.pow(1.0 / 96), generator.getDouble("bandLowerHz"), 1e-8)
+            assertEquals(1000.0 * 2.0.pow(1.0 / 96), generator.getDouble("bandUpperHz"), 1e-8)
+            assertEquals(PinkNoise.DEFAULT_SEED, generator.getInt("seed"))
+            assertEquals(PinkNoise.ALGORITHM, generator.getString("algorithm"))
+            assertFalse(audio.getBoolean("generatorEmitting"))
+        }
+        engine.stop()
+        engine.start(null, true)
+        await { engine.state.value.running }
+        assertEquals(SignalKind.PINK_NOISE, engine.state.value.signalKind)
+        assertEquals(48, engine.state.value.octaveDivision)
+        assertFalse(engine.state.value.emitting)
+    }
+
+    @Test fun stepControlsUseSelectedFractionAndPinkLevelHasItsOwnCap() {
+        engine.setOctaveDivision(32)
+        repeat(32) { engine.stepFrequency(1) }
+        assertEquals(2000.0, engine.state.value.frequencyHz, 1e-8)
+        repeat(32) { engine.stepFrequency(-1) }
+        assertEquals(1000.0, engine.state.value.frequencyHz, 1e-8)
+        engine.setTone(1000.0, -12.0)
+        engine.setSignalKind(SignalKind.PINK_NOISE)
+        assertEquals(-24.0, engine.state.value.levelDbFs, 0.0)
         assertFalse(engine.state.value.emitting)
     }
 

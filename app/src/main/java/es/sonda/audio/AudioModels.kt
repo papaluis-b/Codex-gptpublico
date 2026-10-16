@@ -2,6 +2,8 @@ package es.sonda.audio
 
 import android.media.AudioDeviceInfo
 import es.sonda.dsp.Spectrum
+import es.sonda.dsp.GeneratorSettings
+import es.sonda.dsp.SignalKind
 
 data class AudioDevice(val id: Int, val name: String, val kind: Int, val input: Boolean, val capabilities: String)
 fun AudioDeviceInfo.describe() = AudioDevice(
@@ -48,9 +50,17 @@ data class AudioState(
     val outputTimestampNs: Long? = null,
     val frequencyHz: Double = 1000.0,
     val levelDbFs: Double = -40.0,
+    val signalKind: SignalKind = SignalKind.SINE,
+    val octaveDivision: Int = 3,
+    val noiseLowerHz: Double? = null,
+    val noiseUpperHz: Double? = null,
+    val noiseSettlingSeconds: Double? = null,
+    val generatorClippedSamples: Long = 0,
     val mediaVolume: Int = 0,
     val mediaVolumeMax: Int = 0,
     val events: List<AudioEvent> = emptyList(),
-)
+) {
+    val generatorSettings get() = GeneratorSettings(signalKind, frequencyHz, levelDbFs, octaveDivision)
+}
 data class AudioEvent(val monotonicNs: Long, val description: String)
 data class AnalysisFrame(val spectrum: Spectrum, val firstCaptureFrame: Long, val monotonicNs: Long)

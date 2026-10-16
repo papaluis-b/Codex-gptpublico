@@ -5,6 +5,9 @@ import android.os.Build
 import es.sonda.audio.AnalysisFrame
 import es.sonda.audio.AudioState
 import es.sonda.dsp.FloatWavWriter
+import es.sonda.dsp.PinkNoise
+import es.sonda.dsp.SignalKind
+import es.sonda.BuildConfig
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -30,15 +33,16 @@ class CaptureStore(private val context: Context) {
             val gaps = final.droppedFrames - initial.droppedFrames
             val discontinuities = final.discontinuities - initial.discontinuities
             val clipped = final.clippedSamples - initial.clippedSamples
+            val generatorClipped = final.generatorClippedSamples - initial.generatorClippedSamples
             val quality = when {
                 initial.simulation -> "SINTÉTICO"
-                note.isNotBlank() || gaps > 0 || discontinuities > 0 || clipped > 0 || final.underruns > initial.underruns -> "REVISAR"
+                note.isNotBlank() || gaps > 0 || discontinuities > 0 || clipped > 0 || generatorClipped > 0 || final.underruns > initial.underruns -> "REVISAR"
                 else -> "SIN INCIDENCIAS DETECTADAS · hardware sin validar"
             }
             val json = JSONObject().apply {
                 put("schemaVersion", 1); put("id", directory.name); put("type", "audio-capture")
                 put("synthetic", initial.simulation); put("createdAt", createdAt)
-                put("timezone", ZoneId.systemDefault().id); put("appVersion", "0.1.0")
+                put("timezone", ZoneId.systemDefault().id); put("appVersion", BuildConfig.VERSION_NAME)
                 put("algorithmVersion", "hann-psd-v1"); put("session", "Sesión local")
                 put("device", JSONObject().put("manufacturer", Build.MANUFACTURER).put("model", Build.MODEL)
                     .put("androidVersion", Build.VERSION.RELEASE).put("sdk", Build.VERSION.SDK_INT).put("oneUiVersion", JSONObject.NULL))
@@ -49,6 +53,7 @@ class CaptureStore(private val context: Context) {
                 put("audioAtStart", audioJson(initial)); put("audioAtEnd", audioJson(final))
                 put("qualityStatus", quality); put("note", note)
                 put("clippedSamplesDuringRecording", clipped); put("discontinuitiesDuringRecording", discontinuities)
+                put("generatorClippedSamplesDuringRecording", generatorClipped)
                 put("timingMethod", if (initial.simulation) "synthetic-frame-clock" else "platform-monotonic-uncompensated")
                 put("compensationMs", JSONObject.NULL); put("compensatedDelayMs", JSONObject.NULL)
                 put("events", JSONArray().apply {
@@ -102,7 +107,7 @@ class CaptureStore(private val context: Context) {
                 zip.putNextEntry(ZipEntry(name)); file.inputStream().use { it.copyTo(zip) }; zip.closeEntry()
             }
             zip.putNextEntry(ZipEntry("manifest.json"))
-            zip.write(JSONObject().put("schemaVersion", 1).put("app", "SONDA 0.1.0")
+            zip.write(JSONObject().put("schemaVersion", 1).put("app", "SONDA ${BuildConfig.VERSION_NAME}")
                 .put("measurement", "measurement.json").put("containsEnvironmentalAudio", true).toString(2).toByteArray())
             zip.closeEntry()
         }
@@ -122,7 +127,20 @@ class CaptureStore(private val context: Context) {
         put("outputTimestampFrame", state.outputTimestampFrame ?: JSONObject.NULL); put("outputTimestampNs", state.outputTimestampNs ?: JSONObject.NULL)
         put("inputFramesRead", state.captureFrames); put("outputFramesWritten", state.outputFramesWritten)
         put("outputUnderruns", state.underruns); put("mediaVolume", state.mediaVolume); put("mediaVolumeMax", state.mediaVolumeMax)
-        put("generatorFrequencyHz", state.frequencyHz); put("generatorLevelDbFsPeak", state.levelDbFs)
+        put("generatorFrequencyHz", state.frequencyHz)
+        put("generatorLevelDbFsPeak", if (state.signalKind == SignalKind.SINE) state.levelDbFs else JSONObject.NULL)
+        put("generatorLevelDbFsRms", if (state.signalKind == SignalKind.PINK_NOISE) state.levelDbFs else JSONObject.NULL)
+        put("generator", JSONObject().apply {
+            put("kind", state.signalKind.name); put("centerHz", state.frequencyHz)
+            put("octaveDivision", state.octaveDivision); put("octaveBase", 2)
+            put("levelDbFs", state.levelDbFs); put("levelReference", state.generatorSettings.levelReference)
+            put("bandLowerHz", state.noiseLowerHz ?: JSONObject.NULL); put("bandUpperHz", state.noiseUpperHz ?: JSONObject.NULL)
+            put("bandDefinition", if (state.signalKind == SignalKind.PINK_NOISE) "Butterworth4 -3dB edges; not brick-wall" else JSONObject.NULL)
+            put("algorithm", if (state.signalKind == SignalKind.PINK_NOISE) PinkNoise.ALGORITHM else "continuous-phase-sine-v1")
+            put("seed", if (state.signalKind == SignalKind.PINK_NOISE) PinkNoise.DEFAULT_SEED else JSONObject.NULL)
+            put("filterSettlingSecondsApprox", state.noiseSettlingSeconds ?: JSONObject.NULL)
+            put("clippedSamples", state.generatorClippedSamples)
+        })
         put("generatorEmitting", state.emitting); put("digitalClippedSamples", state.clippedSamples)
         put("platformInputLossDetection", "partial: timestamp checks; Android does not expose all capture overruns")
     }

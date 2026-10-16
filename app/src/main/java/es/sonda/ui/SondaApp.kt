@@ -29,9 +29,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import es.sonda.PlotFrame
 import es.sonda.SondaViewModel
+import es.sonda.BuildConfig
 import es.sonda.audio.AudioState
 import es.sonda.data.SavedCapture
 import es.sonda.dsp.Spectrum
+import es.sonda.dsp.OctaveBands
+import es.sonda.dsp.SignalKind
+import es.sonda.dsp.GeneratorSettings
 import java.util.Locale
 import kotlin.math.*
 
@@ -134,7 +138,7 @@ fun SondaApp(model: SondaViewModel, onStart: (Int?, Boolean) -> Unit, onShare: (
                         exportError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     }
                 }
-                Text("SONDA 0.1 · Respuesta relativa, micrófono sin calibrar", color = Muted, fontSize = 11.sp)
+                Text("SONDA ${BuildConfig.VERSION_NAME} · Respuesta relativa, micrófono sin calibrar", color = Muted, fontSize = 11.sp)
             }
         }
         share?.let { capture ->
@@ -159,7 +163,7 @@ fun SondaApp(model: SondaViewModel, onStart: (Int?, Boolean) -> Unit, onShare: (
             }, color = if (state.simulation) Amber else Lime, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             if (state.running) {
                 Text("Salida: ${if (state.simulation) "ninguna" else state.activeOutput}", fontSize = 12.sp, maxLines = 2)
-                Text("${if (state.recording) "● GRABANDO" else "Captura activa"}  /  ${if (state.emitting) "SENO ACTIVO" else "Emisión en silencio"}", fontSize = 12.sp)
+                Text("${if (state.recording) "● GRABANDO" else "Captura activa"}  /  ${if (state.emitting) "${state.signalKind.label.uppercase()} ACTIVO" else "Emisión en silencio"}", fontSize = 12.sp)
             }
             Text(state.message, color = Muted, fontSize = 12.sp)
         }
@@ -207,8 +211,8 @@ fun SondaApp(model: SondaViewModel, onStart: (Int?, Boolean) -> Unit, onShare: (
         Spectrogram(plot)
         Text("Antiguo arriba / reciente abajo · color fijo −110 a −30 dBFS/Hz · ${fmt((spectrum?.durationMs ?: 170.67) * 90 / 1000)} s · huecos sin rellenar", color = Muted, fontSize = 11.sp)
     }
-    if (state.droppedFrames > 0 || state.clippedSamples > 0 || state.discontinuities > 0) {
-        Text("REVISAR · clipping ${state.clippedSamples} muestras · cola perdida ${state.droppedFrames} · discontinuidades ${state.discontinuities}", color = Amber, fontSize = 12.sp)
+    if (state.droppedFrames > 0 || state.clippedSamples > 0 || state.discontinuities > 0 || state.generatorClippedSamples > 0) {
+        Text("REVISAR · clipping entrada ${state.clippedSamples} / generador ${state.generatorClippedSamples} muestras · cola perdida ${state.droppedFrames} · discontinuidades ${state.discontinuities}", color = Amber, fontSize = 12.sp)
     }
     Button(onClick = { model.engine.toggleRecording() }, enabled = state.running, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
         Text(if (state.recording) "Finalizar y guardar WAV" else "Grabar WAV")
@@ -216,36 +220,71 @@ fun SondaApp(model: SondaViewModel, onStart: (Int?, Boolean) -> Unit, onShare: (
 }
 
 @Composable private fun Generator(model: SondaViewModel, state: AudioState) {
-    var frequency by remember(state.frequencyHz) { mutableStateOf(fmt(state.frequencyHz, 1)) }
+    var frequency by remember(state.frequencyHz) { mutableStateOf(fmt(state.frequencyHz, 2)) }
     var error by remember { mutableStateOf<String?>(null) }
     var slider by remember(state.levelDbFs) { mutableFloatStateOf(state.levelDbFs.toFloat()) }
-    Text("Generador de seno", style = MaterialTheme.typography.headlineSmall)
+    val pink = state.signalKind == SignalKind.PINK_NOISE
+    val maximum = GeneratorSettings.maximumFrequency(state.outputRate.takeIf { it > 0 } ?: 48000, state.signalKind, state.octaveDivision)
+    Text("Generador de señal", style = MaterialTheme.typography.headlineSmall)
     Text("La selección de frecuencia no activa la emisión.", color = Muted, fontSize = 13.sp)
+    Panel("SEÑAL") {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SignalKind.entries.forEach { kind ->
+                FilterChip(selected = state.signalKind == kind, onClick = { model.engine.setSignalKind(kind) },
+                    modifier = Modifier.weight(1f), label = { Text(kind.label) })
+            }
+        }
+        Text("Cambiar el tipo de señal silencia la salida. Pulsa Emitir para activarla.", color = Muted, fontSize = 12.sp)
+    }
+    Panel(if (pink) "PASO Y ANCHURA DE CAMPANA" else "PASO DE FRECUENCIA") {
+        OctaveBands.divisions.chunked(2).forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEach { division ->
+                    FilterChip(selected = state.octaveDivision == division, onClick = { model.engine.setOctaveDivision(division) },
+                        modifier = Modifier.weight(1f), label = { Text("1/$division oct") })
+                }
+            }
+        }
+        Text("− / + avanzan 1/${state.octaveDivision} de octava desde la frecuencia actual.", color = Muted, fontSize = 12.sp)
+    }
     Panel("FRECUENCIA") {
         OutlinedTextField(value = frequency, onValueChange = { frequency = it }, label = { Text("Frecuencia · Hz") },
             singleLine = true, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), isError = error != null)
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { model.engine.setTone(state.frequencyHz / 2, state.levelDbFs) }, modifier = Modifier.weight(1f)) { Text("÷ 2") }
+            OutlinedButton(onClick = { model.engine.stepFrequency(-1) },
+                modifier = Modifier.weight(1f).semantics { contentDescription = "Bajar un paso de frecuencia" }) { Text("−", fontSize = 22.sp) }
             Button(onClick = {
                 val value = frequency.replace(',', '.').toDoubleOrNull()
-                if (value == null || !value.isFinite() || value !in 20.0..20000.0) error = "Introduce entre 20 y 20 000 Hz"
+                if (value == null || !value.isFinite() || value !in 20.0..maximum) error = "Introduce entre 20 y ${fmt(maximum, 0)} Hz"
                 else { error = null; model.engine.setTone(value, state.levelDbFs) }
             }, modifier = Modifier.weight(2f)) { Text("Aplicar Hz") }
-            OutlinedButton(onClick = { model.engine.setTone(state.frequencyHz * 2, state.levelDbFs) }, modifier = Modifier.weight(1f)) { Text("× 2") }
+            OutlinedButton(onClick = { model.engine.stepFrequency(1) },
+                modifier = Modifier.weight(1f).semantics { contentDescription = "Subir un paso de frecuencia" }) { Text("+", fontSize = 22.sp) }
         }
-        Text("${fmt(state.frequencyHz, 1)} Hz", fontSize = 32.sp, color = Lime, fontFamily = FontFamily.Monospace)
+        Text("${fmt(state.frequencyHz, 2)} Hz", fontSize = 32.sp, color = Lime, fontFamily = FontFamily.Monospace)
+    }
+    if (pink) Panel("CAMPANA DE RUIDO ROSA · 1/${state.octaveDivision} OCTAVA") {
+        Text("Centro: ${fmt(state.frequencyHz, 2)} Hz", color = Lime)
+        Text("Límites −3 dB: ${fmt(state.noiseLowerHz ?: state.frequencyHz, 2)} – ${fmt(state.noiseUpperHz ?: state.frequencyHz, 2)} Hz",
+            fontFamily = FontFamily.Monospace, fontSize = 13.sp)
+        Text("Filtro con caída gradual fuera de la banda. Estabilización aproximada: ${fmt(state.noiseSettlingSeconds ?: 0.0, 2)} s.", color = Muted, fontSize = 12.sp)
+        if ((state.noiseUpperHz ?: 0.0) - (state.noiseLowerHz ?: 0.0) < (state.inputRate.takeIf { it > 0 } ?: 48000) / 8192.0) {
+            Text("Esta banda es más estrecha que los bins del analizador actual.", color = Amber, fontSize = 12.sp)
+        }
     }
     Panel("NIVEL DIGITAL") {
-        Text("${fmt(slider.toDouble(), 0)} dBFS pico", style = MaterialTheme.typography.headlineSmall)
-        Slider(value = slider, onValueChange = { slider = it }, valueRange = -80f..-12f,
+        Text("${fmt(slider.toDouble(), 0)} dBFS ${if (pink) "RMS" else "pico"}", style = MaterialTheme.typography.headlineSmall)
+        Slider(value = slider, onValueChange = { slider = it }, valueRange = -80f..state.generatorSettings.maximumLevel.toFloat(),
             onValueChangeFinished = { model.engine.setTone(state.frequencyHz, slider.toDouble()) },
-            modifier = Modifier.semantics { contentDescription = "Nivel del seno en dBFS pico" })
-        Text("Inicio −40 dBFS · límite −12 dBFS · rampa de nivel 20 ms. El volumen Android y la ganancia de la PA son independientes.", color = Muted, fontSize = 12.sp)
+            modifier = Modifier.semantics { contentDescription = "Nivel ${if (pink) "del ruido rosa en dBFS RMS" else "del seno en dBFS pico"}" })
+        Text(if (pink) "Nivel RMS objetivo tras estabilización; el ruido fluctúa. Límite −24 dBFS RMS."
+            else "Nivel de pico del seno · límite −12 dBFS.", color = Muted, fontSize = 12.sp)
+        Text("Inicio −40 dBFS · rampas 20 ms. El volumen Android y la ganancia de la PA son independientes.", color = Muted, fontSize = 12.sp)
         Text("Volumen multimedia: ${state.mediaVolume}/${state.mediaVolumeMax} · estéreo L+R idénticos", color = Muted, fontSize = 12.sp)
     }
     Button(onClick = { model.engine.emit(true) }, enabled = state.running && !state.simulation && state.outputId != null && !state.emitting,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Emitir seno") }
+        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(if (pink) "Emitir ruido rosa" else "Emitir seno") }
     if (state.outputId == null || state.simulation) Text("Para emitir, detén la sesión y selecciona un DAC USB o el modo de prueba por altavoz.", color = Muted, fontSize = 13.sp)
     Text("No hay monitorización del micrófono hacia la salida. Al salir de la app, se detiene el audio.", color = Muted, fontSize = 12.sp)
 }
@@ -262,6 +301,7 @@ fun SondaApp(model: SondaViewModel, onStart: (Int?, Boolean) -> Unit, onShare: (
             "Timestamp salida" to "${state.outputTimestamp}; frame ${state.outputTimestampFrame ?: "—"}; ns ${state.outputTimestampNs ?: "—"}",
             "Contadores" to "${state.captureFrames} frames leídos / ${state.outputFramesWritten} frames escritos",
             "Incidencias" to "${state.droppedFrames} frames perdidos en cola / ${state.discontinuities} discontinuidades / ${state.underruns} underruns salida / ${state.clippedSamples} muestras clipping",
+            "Generador" to "${state.signalKind.label}, ${state.frequencyHz} Hz, 1/${state.octaveDivision} octava, ${state.levelDbFs} dBFS ${state.generatorSettings.levelReference}; clipping: ${state.generatorClippedSamples}",
         ).forEach { (title, value) ->
             Text(title, color = Muted, fontSize = 11.sp)
             Text(value, fontFamily = FontFamily.Monospace, fontSize = 12.sp)

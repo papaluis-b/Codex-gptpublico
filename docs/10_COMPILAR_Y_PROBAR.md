@@ -1,4 +1,4 @@
-# Compilación y uso · SONDA 0.1
+# Compilación y uso · SONDA 0.2
 
 ## Android Studio o SDK local
 
@@ -33,9 +33,9 @@ Destinos de instalación: `github.com`, sus hosts de assets de releases, `servic
 1. Conectar el DAC USB antes de iniciar, si se va a emitir. Elegir USB; sin DAC, usar Solo micrófono. El altavoz interno se activa únicamente eligiendo el modo de prueba.
 2. Pulsar Iniciar audio real y permitir el micrófono. Revisar las rutas activas en Diagnóstico. La apertura empieza en silencio.
 3. En Analizar, observar el espectro, RMS, clipping y el espectrograma. Tocar el gráfico cambia el cursor; Usar frecuencia en el generador es una acción separada.
-4. En Generar, fijar frecuencia y nivel y pulsar Emitir seno. Empezar con la ganancia de la cadena controlada. SILENCIO permanece accesible en todas las áreas.
+4. En Generar, elegir Seno o Ruido rosa y la fracción: 1/3, 1/24, 1/32 o 1/48 de octava. Los botones − / + cambian la frecuencia en esa proporción. En ruido rosa, la misma fracción fija la anchura de la campana; se muestran sus bordes a −3 dB. Fijar nivel y pulsar Emitir seno o Emitir ruido rosa. El seno usa dBFS pico y el ruido dBFS RMS. Cambiar el tipo silencia la emisión. Empezar con la ganancia de la cadena controlada. SILENCIO permanece accesible en todas las áreas.
 5. Grabar WAV inicia una captura explícita; Finalizar la guarda. El límite por captura es 120 s. En Capturas, Exportar ZIP permite guardar o compartir WAV, JSON y último espectro CSV.
-6. Explorar simulación permite recorrer el flujo sin permisos ni hardware. El estado y los archivos se etiquetan como sintéticos; no emite sonido.
+6. Explorar simulación permite recorrer el flujo sin permisos ni hardware. El estado y los archivos se etiquetan como sintéticos; no emite sonido. La entrada simulada permanece en 1 kHz, aunque cambies los controles del generador.
 
 El analizador funciona sin salida. Para cambiar de salida hay que detener todo y abrir de nuevo. Al ir al fondo, bloquear pantalla, perder foco o cambiar una ruta, el audio se detiene y no se reanuda solo. La rotación también detiene la sesión en este primer hito.
 
@@ -45,6 +45,7 @@ El analizador funciona sin salida. Para cambiar de salida hay que detener todo y
 - Confirmar por Diagnóstico y mediante una prueba controlada que captura el micrófono del teléfono y emite por el DAC; la ruta de plataforma necesita contraste físico.
 - Probar captura/reproducción simultáneas durante diez minutos. Revisar clipping, pérdidas de cola, discontinuidades, underruns y comportamiento térmico.
 - Desconectar el DAC mientras emite; pulsar Home; bloquear pantalla; provocar una interrupción de audio; volver: el tono debe permanecer apagado.
+- En Generar, comprobar que 3, 24, 32 o 48 pasos multiplican la frecuencia por dos, según la fracción elegida. Para ruido rosa, comprobar la campana con una captura o un analizador externo, esperar la estabilización indicada y probar SILENCIO y los cambios de tipo/anchura. El FFT de 8192 muestras no resuelve todas las bandas estrechas a baja frecuencia; ver `12_GENERADOR_FRACCIONES_Y_ROSA.md`.
 - Grabar diez segundos, exportar, reabrir WAV/JSON en un ordenador y comprobar amplitudes, sample rate, flags de calidad y checksum.
 - Repetir con texto grande y orientación horizontal. Probar rechazo y revocación del permiso.
 

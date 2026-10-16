@@ -14,6 +14,10 @@ import es.sonda.data.CaptureStore
 import es.sonda.dsp.AudioRing
 import es.sonda.dsp.SignalGenerator
 import es.sonda.dsp.SpectrumProcessor
+import es.sonda.dsp.GeneratorSettings
+import es.sonda.dsp.NoiseBand
+import es.sonda.dsp.OctaveBands
+import es.sonda.dsp.SignalKind
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -87,7 +91,11 @@ class AudioEngine(context: Context, private val captures: CaptureStore) {
             synchronized(sessionLock) {
                 if (ticket != token.get() || closed) return@execute
                 _analysis.value = null
-                _state.value = AudioState(preparing = true, simulation = simulation, message = "Preparando audio en silencio…")
+                val previous = state.value
+                _state.value = AudioState(preparing = true, simulation = simulation, message = "Preparando audio en silencio…",
+                    frequencyHz = previous.frequencyHz, levelDbFs = previous.levelDbFs, signalKind = previous.signalKind,
+                    octaveDivision = previous.octaveDivision, noiseLowerHz = previous.noiseLowerHz,
+                    noiseUpperHz = previous.noiseUpperHz, noiseSettlingSeconds = previous.noiseSettlingSeconds)
                 ring = AudioRing()
                 inputFrames.set(0); outputFrames.set(0); stopNote = ""
             }
@@ -140,7 +148,10 @@ class AudioEngine(context: Context, private val captures: CaptureStore) {
                     check(out.setPreferredDevice(output)) { "Android rechazó la salida solicitada" }
                     out.addOnRoutingChangedListener(routeListener, main)
                 }
-            oscillator = SignalGenerator(track!!.sampleRate)
+            synchronized(sessionLock) {
+                oscillator = SignalGenerator(track!!.sampleRate).also { it.configure(state.value.generatorSettings) }
+                updateGeneratorSettings { oscillator!!.settings }
+            }
         }
         _state.update { it.copy(
             requestedInput = input.routeName(), requestedOutput = output?.routeName() ?: "Sin salida · solo análisis",
@@ -224,6 +235,7 @@ class AudioEngine(context: Context, private val captures: CaptureStore) {
         try {
             while (running.get()) {
                 generator.render(block, 1024, out.channelCount)
+                if (generator.clippedSamples > 0) { stop("Clipping del generador: emisión detenida"); return }
                 var offset = 0
                 while (offset < block.size && running.get()) {
                     val count = out.write(block, offset, block.size - offset, AudioTrack.WRITE_BLOCKING)
@@ -317,6 +329,7 @@ class AudioEngine(context: Context, private val captures: CaptureStore) {
                         _state.update { it.copy(
                             activeInput = rec?.routedDevice?.routeName() ?: "Sin verificar", activeOutput = out?.routedDevice?.routeName() ?: "Sin salida",
                             underruns = out?.underrunCount ?: 0, mediaVolume = volume,
+                            generatorClippedSamples = oscillator?.clippedSamples ?: it.generatorClippedSamples,
                             inputTimestamp = if (inValid) "Monotónico de plataforma · sin compensar" else "No disponible",
                             outputTimestamp = if (outValid) "Monotónico de plataforma · sin compensar" else "No disponible",
                             inputTimestampFrame = if (inValid) inStamp.framePosition else null, inputTimestampNs = if (inValid) inStamp.nanoTime else null,
@@ -331,7 +344,8 @@ class AudioEngine(context: Context, private val captures: CaptureStore) {
         } finally {
             recordingRequested = false
             _state.update { it.copy(captureFrames = inputFrames.get(), outputFramesWritten = outputFrames.get(),
-                droppedFrames = ring.droppedFrames.get(), discontinuities = discontinuities, clippedSamples = clipped) }
+                droppedFrames = ring.droppedFrames.get(), discontinuities = discontinuities, clippedSamples = clipped,
+                generatorClippedSamples = oscillator?.clippedSamples ?: it.generatorClippedSamples) }
             recording?.let { saved ->
                 runCatching { saved.finish(state.value, analysis.value, stopNote) }
                     .onFailure { _state.update { s -> s.copy(message = "No se pudo completar el archivo: ${it.message}") } }
@@ -342,11 +356,34 @@ class AudioEngine(context: Context, private val captures: CaptureStore) {
     }
 
     fun setTone(frequency: Double, level: Double) {
-        val f = frequency.coerceIn(20.0, 20000.0)
-        val l = level.coerceIn(-80.0, -12.0)
-        oscillator?.let { it.frequencyHz = f; it.levelDbFs = l }
-        _state.update { it.copy(frequencyHz = f, levelDbFs = l) }
-        event("Generador configurado: $f Hz, $l dBFS pico")
+        updateGeneratorSettings { it.copy(frequencyHz = frequency, levelDbFs = level) }
+    }
+
+    fun setSignalKind(kind: SignalKind) = updateGeneratorSettings { it.copy(kind = kind) }
+    fun setOctaveDivision(division: Int) = updateGeneratorSettings { it.copy(octaveDivision = division) }
+    fun stepFrequency(direction: Int) = updateGeneratorSettings {
+        val maximum = GeneratorSettings.maximumFrequency(state.value.outputRate.takeIf { rate -> rate > 0 } ?: 48000, it.kind, it.octaveDivision)
+        it.copy(frequencyHz = OctaveBands.step(it.frequencyHz, it.octaveDivision, direction, maximum))
+    }
+
+    private fun updateGeneratorSettings(change: (GeneratorSettings) -> GeneratorSettings) = synchronized(sessionLock) {
+        val before = state.value
+        val rate = oscillator?.sampleRate ?: before.outputRate.takeIf { it > 0 } ?: 48000
+        val next = change(before.generatorSettings).constrained(rate)
+        val changedKind = next.kind != before.signalKind
+        if (changedKind) oscillator?.enabled = false
+        oscillator?.configure(next)
+        val band = oscillator?.noiseBand ?: if (next.kind == SignalKind.PINK_NOISE) NoiseBand(next.frequencyHz, next.octaveDivision, rate) else null
+        _state.update { it.copy(frequencyHz = next.frequencyHz, levelDbFs = next.levelDbFs,
+            signalKind = next.kind, octaveDivision = next.octaveDivision,
+            noiseLowerHz = band?.lowerHz, noiseUpperHz = band?.upperHz, noiseSettlingSeconds = band?.settlingSeconds,
+            emitting = if (changedKind) false else it.emitting,
+            message = when {
+                changedKind -> "${next.kind.label} seleccionado · emisión en silencio"
+                it.emitting -> "${next.kind.label} activo · ${next.frequencyHz} Hz"
+                else -> it.message
+            }) }
+        event("Generador: ${next.kind.name}, ${next.frequencyHz} Hz, ${next.levelDbFs} dBFS ${next.levelReference}, 1/${next.octaveDivision} octava")
     }
 
     fun emit(enabled: Boolean) = synchronized(sessionLock) {
@@ -355,7 +392,7 @@ class AudioEngine(context: Context, private val captures: CaptureStore) {
             _state.update { it.copy(message = "Inicia audio con una salida confirmada antes de emitir") }; return
         }
         generator?.enabled = enabled
-        _state.update { it.copy(emitting = enabled, message = if (enabled) "Seno activo · ${it.frequencyHz.toInt()} Hz" else "Emisión en silencio") }
+        _state.update { it.copy(emitting = enabled, message = if (enabled) "${it.signalKind.label} activo · ${it.frequencyHz} Hz" else "Emisión en silencio") }
         event(if (enabled) "Emisión activada por el usuario" else "Silencio solicitado · rampa 20 ms")
     }
 

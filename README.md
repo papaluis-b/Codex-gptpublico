@@ -3,13 +3,13 @@
 Versión de especificación: 1.0 · 15 de octubre de 2026.
 Nombre provisional, sin decisión de marca. Idioma del producto: español.
 
-## Aplicación 0.1.0 · primer hito
+## Aplicación 0.2.0 · fracciones de octava y ruido rosa
 
-[Descargar ZIP de instalación (9,7 MB)](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/heads/sonda-v0.1.0/artifacts/SONDA-0.1.0-instalar.zip) · [Descargar APK para Android](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/heads/sonda-v0.1.0/artifacts/SONDA-0.1.0-debug.apk) · [Descargar código fuente ZIP](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/heads/sonda-v0.1.0/artifacts/SONDA-0.1.0-codigo.zip).
+[Descargar ZIP de instalación](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/heads/sonda-v0.2.0/artifacts/SONDA-0.2.0-instalar.zip) · [Descargar APK para Android](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/heads/sonda-v0.2.0/artifacts/SONDA-0.2.0-debug.apk) · [Descargar código fuente ZIP](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/heads/sonda-v0.2.0/artifacts/SONDA-0.2.0-codigo.zip).
 
-Si abres el enlace desde ChatGPT y falla la descarga, copia el enlace y pégalo en Chrome. Para el ZIP de instalación: abre Mis archivos → Descargas → SONDA-0.1.0-instalar.zip → Extraer; después toca SONDA-0.1.0-debug.apk.
+Si abres el enlace desde ChatGPT y falla la descarga, copia el enlace y pégalo en Chrome. Para el ZIP de instalación: abre Mis archivos → Descargas → SONDA-0.2.0-instalar.zip → Extraer; después toca SONDA-0.2.0-debug.apk. Esta entrega conserva la firma de 0.1.0 para poder actualizarla sin desinstalar.
 
-Proyecto Android Kotlin/Compose con diagnóstico de rutas solicitadas/activas, micrófono integrado, salida USB independiente, seno de fase continua con rampa, analizador PSD/espectrograma, grabación WAV float32 y exportación local ZIP. Incluye simulación identificada y núcleo DSP independiente para pruebas JVM. No requiere cuenta ni Internet en el teléfono.
+Proyecto Android Kotlin/Compose con diagnóstico de rutas solicitadas/activas, micrófono integrado, salida USB independiente, seno de fase continua con rampa, analizador PSD/espectrograma, grabación WAV float32 y exportación local ZIP. En Generar puedes seleccionar pasos de **1/3, 1/24, 1/32 y 1/48 de octava**. Al elegir **Ruido rosa**, la fracción también determina la anchura de su campana, centrada en la frecuencia seleccionada; se muestran los bordes del filtro a −3 dB. Incluye simulación identificada y núcleo DSP independiente para pruebas JVM. No requiere cuenta ni Internet en el teléfono.
 
 ```bash
 ./gradlew :dsp:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
@@ -17,7 +17,7 @@ Proyecto Android Kotlin/Compose con diagnóstico de rutas solicitadas/activas, m
 
 Requiere JDK 21 y Android SDK 36. APK: `app/build/outputs/apk/debug/app-debug.apk`.
 
-[Compilación, instalación y prueba manual](docs/10_COMPILAR_Y_PROBAR.md) · [Decisiones](docs/09_DECISIONES.md) · [Evidencia y pendientes](docs/11_ESTADO_H0_H1.md) · [Dependencias y licencias](DEPENDENCIES.md).
+[Compilación, instalación y prueba manual](docs/10_COMPILAR_Y_PROBAR.md) · [Decisiones](docs/09_DECISIONES.md) · [Generador 0.2: funcionamiento y pruebas](docs/12_GENERADOR_FRACCIONES_Y_ROSA.md) · [Evidencia de 0.1](docs/11_ESTADO_H0_H1.md) · [Dependencias y licencias](DEPENDENCIES.md).
 
 Las rutas reales, la captura/reproducción simultáneas y el procesado del S24 Ultra necesitan validación en el teléfono y DAC. Delay, respuesta mediante barrido y compensación quedan para los hitos siguientes.
 
