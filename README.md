@@ -3,6 +3,20 @@
 Versión de especificación: 1.0 · 15 de octubre de 2026.
 Nombre provisional, sin decisión de marca. Idioma del producto: español.
 
+## SONDA Generador 0.1.0 · aplicación independiente
+
+[Descargar instalador ZIP](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/heads/sonda-generador-v0.1.0/artifacts/SONDA-Generador-0.1.0-instalar.zip) · [Descargar APK](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/heads/sonda-generador-v0.1.0/artifacts/SONDA-Generador-0.1.0-debug.apk) · [Código fuente ZIP](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/heads/sonda-generador-v0.1.0/artifacts/SONDA-Generador-0.1.0-codigo.zip).
+
+App dedicada a generar seno y ruido rosa en campanas, con pasos de **1/3, 1/24, 1/32 y 1/48 de octava**. Tiene su propio icono y el identificador `es.sonda.generador`, por lo que puede instalarse junto a la app general. Selección de salida USB y modo de prueba por altavoz; funciona sin micrófono, cuenta ni Internet. La salida se prepara en silencio y requiere pulsar Emitir. Al salir de la app se detiene.
+
+Para instalar desde el teléfono, copia el enlace en Chrome, abre el ZIP en Mis archivos, pulsa Extraer y toca `SONDA-Generador-0.1.0-debug.apk`. No necesitas desinstalar SONDA. [Guía y validación del generador independiente](docs/13_GENERADOR_INDEPENDIENTE.md).
+
+El módulo Android `:generator` y la aplicación general `:app` comparten el núcleo `:dsp`; cada aplicación genera su propio APK. Para compilar solo el generador:
+
+```bash
+./gradlew :dsp:test :generator:testDebugUnitTest :generator:lintDebug :generator:assembleDebug
+```
+
 ## Aplicación 0.2.0 · fracciones de octava y ruido rosa
 
 [Descargar ZIP de instalación](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/heads/sonda-v0.2.0/artifacts/SONDA-0.2.0-instalar.zip) · [Descargar APK para Android](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/heads/sonda-v0.2.0/artifacts/SONDA-0.2.0-debug.apk) · [Descargar código fuente ZIP](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/heads/sonda-v0.2.0/artifacts/SONDA-0.2.0-codigo.zip).

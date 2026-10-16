@@ -15,5 +15,6 @@ if proxy.hostname:
 # Installing this development SDK includes accepting its published package licenses.
 subprocess.run(command, input=('y\n' * 150).encode(), check=True)
 PY
-./gradlew :dsp:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --no-daemon --console=plain
+./gradlew :dsp:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :generator:testDebugUnitTest :generator:lintDebug :generator:assembleDebug --no-daemon --console=plain
 apksigner verify app/build/outputs/apk/debug/app-debug.apk
+apksigner verify generator/build/outputs/apk/debug/generator-debug.apk

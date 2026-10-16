@@ -16,6 +16,17 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 También puedes copiar el APK al teléfono y abrirlo, autorizando esa fuente de instalación en los ajustes Android cuando lo solicite.
 
+### Aplicación independiente SONDA Generador
+
+El mismo proyecto incluye `:generator`. Para probar y compilar esa aplicación:
+
+```bash
+./gradlew :dsp:test :generator:testDebugUnitTest :generator:lintDebug :generator:assembleDebug
+adb install -r generator/build/outputs/apk/debug/generator-debug.apk
+```
+
+Su identificador es `es.sonda.generador` y su APK se instala junto a SONDA, sin reemplazarla. No requiere micrófono. El script cloud compila y comprueba las dos aplicaciones. Guía de uso y validación física en `13_GENERADOR_INDEPENDIENTE.md`.
+
 ## Entorno cloud Linux x86_64
 
 Cada tarea cloud ya está aislada: usar este checkout, sin crear worktrees. Las herramientas están en `.tooling/` y no se versionan. Las descargas conservan TLS y se contrastan con los digests oficiales. No copiar credenciales ni desactivar validación TLS.

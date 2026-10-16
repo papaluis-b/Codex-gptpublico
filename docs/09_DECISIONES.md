@@ -59,3 +59,11 @@ Se incorporan las modificaciones solicitadas: pasos seleccionables de 1/3, 1/24,
 La campana es un paso banda Butterworth de orden total 4, con bordes a −3 dB y caída gradual. Se normaliza el ruido a un RMS objetivo independiente de la anchura; el nivel del seno sigue referido a pico. El ruido se limita a −24 dBFS RMS y el seno a −12 dBFS pico. El diseño y la calibración de coeficientes se realizan fuera del hilo de salida. El cambio de campana pasa por ganancia cero con rampas de 20 ms; cambiar de seno a ruido o viceversa exige volver a pulsar Emitir.
 
 Los metadatos añaden tipo, fracción, bordes, referencia de nivel, algoritmo, semilla y clipping del generador. El WAV sigue siendo la captura original del micrófono. La simulación conserva su señal sintética fija de 1 kHz y no reproduce la selección del generador ni emite audio. Funcionamiento, fuentes, pruebas y pendientes de 0.2 en `12_GENERADOR_FRACCIONES_Y_ROSA.md`.
+
+## 2026-10-16 · SONDA Generador 0.1.0, aplicación independiente
+
+El usuario solicita una app separada como módulo de generador. Se añade el módulo Android `:generator`, con nombre SONDA Generador, icono y applicationId `es.sonda.generador`. La app general sigue en `:app` con `es.sonda`; ambas pueden coexistir. El generador independiente comparte `:dsp`, con la misma señal, pasos y controles de nivel de SONDA 0.2. No se copia el motor matemático ni se introduce otra dependencia de DSP.
+
+Se implementa salida AudioTrack independiente. Como esta app solo emite, no abre AudioRecord ni necesita permiso de micrófono o una entrada antes de emitir. La selección USB o de altavoz es explícita; la ruta activa se comprueba con el stream en silencio antes de habilitar Emitir. Foco, desconexión, cambio de ruta, error y segundo plano detienen la salida sin rearmar. No se añade servicio de segundo plano ni se establece comunicación entre aplicaciones. Las pruebas con un backend de salida controlado ejercitan los estados sin presentarlos como validación física.
+
+La aplicación independiente no incluye analizador, grabación, exportación de medidas ni simulación de captura. Su guía, compilación y validación se mantienen en `13_GENERADOR_INDEPENDIENTE.md`.

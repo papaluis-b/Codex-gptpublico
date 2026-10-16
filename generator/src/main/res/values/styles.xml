@@ -1,0 +1,8 @@
+<resources>
+    <style name="Theme.SondaGenerator" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:colorAccent">#80E1D4</item>
+        <item name="android:windowBackground">#101717</item>
+    </style>
+</resources>
