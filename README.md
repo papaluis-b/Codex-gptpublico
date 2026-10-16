@@ -1,7 +1,23 @@
-# SONDA Android — documentación de desarrollo para Codex
+# SONDA Android
 
 Versión de especificación: 1.0 · 15 de octubre de 2026.
 Nombre provisional, sin decisión de marca. Idioma del producto: español.
+
+## Aplicación 0.1.0 · primer hito
+
+[Descargar APK para Android](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/heads/sonda-v0.1.0/artifacts/SONDA-0.1.0-debug.apk) · [Descargar código fuente ZIP](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/heads/sonda-v0.1.0/artifacts/SONDA-0.1.0-codigo.zip).
+
+Proyecto Android Kotlin/Compose con diagnóstico de rutas solicitadas/activas, micrófono integrado, salida USB independiente, seno de fase continua con rampa, analizador PSD/espectrograma, grabación WAV float32 y exportación local ZIP. Incluye simulación identificada y núcleo DSP independiente para pruebas JVM. No requiere cuenta ni Internet en el teléfono.
+
+```bash
+./gradlew :dsp:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+```
+
+Requiere JDK 21 y Android SDK 36. APK: `app/build/outputs/apk/debug/app-debug.apk`.
+
+[Compilación, instalación y prueba manual](docs/10_COMPILAR_Y_PROBAR.md) · [Decisiones](docs/09_DECISIONES.md) · [Evidencia y pendientes](docs/11_ESTADO_H0_H1.md) · [Dependencias y licencias](DEPENDENCIES.md).
+
+Las rutas reales, la captura/reproducción simultáneas y el procesado del S24 Ultra necesitan validación en el teléfono y DAC. Delay, respuesta mediante barrido y compensación quedan para los hitos siguientes.
 
 ## Propósito
 
@@ -9,15 +25,9 @@ Crear una herramienta personal de medición y diagnóstico de sistemas de sonido
 
 Configuración acordada: salida por DAC/interfaz USB-C hacia mesa, procesador o PA; captura mediante el micrófono interno del teléfono. El modelo de DAC y la versión Android/One UI todavía no están determinados. No bloquear el desarrollo de software por esos datos; registrarlos al probar el dispositivo. El micrófono externo y la transferencia de dos entradas quedan previstos para fases posteriores.
 
-## Cómo usar este paquete
+## Especificaciones del producto
 
-1. Descomprimir en el repositorio de trabajo o adjuntar el ZIP a Codex y pedirle que lo extraiga.
-2. Entregar el contenido de `PROMPT_CODEX.md` como instrucción inicial.
-3. Codex debe leer `AGENTS.md` y todos los documentos de `docs/` antes de implementar.
-4. El primer resultado será una aplicación instalable de diagnóstico de rutas y audio. Después, desarrollar las funciones por hitos.
-5. Las validaciones en teléfono se distinguen de las pruebas automáticas. Una prueba pendiente no equivale a una función validada.
-
-Este paquete contiene especificaciones y ejemplos de datos. No contiene una app compilada, código de medición probado ni resultados reales del Samsung.
+`PROMPT_CODEX.md`, `AGENTS.md` y `docs/01` a `docs/08` definen la especificación inicial. Leerlos antes de continuar implementando. Trabajar por hitos y conservar la separación entre pruebas sintéticas y validaciones físicas. El ejemplo de medida sigue siendo ficticio; no contiene resultados reales del Samsung.
 
 ## Documentos
 
