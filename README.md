@@ -5,7 +5,9 @@ Nombre provisional, sin decisión de marca. Idioma del producto: español.
 
 ## Aplicación 0.1.0 · primer hito
 
-[Descargar APK para Android](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/heads/sonda-v0.1.0/artifacts/SONDA-0.1.0-debug.apk) · [Descargar código fuente ZIP](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/heads/sonda-v0.1.0/artifacts/SONDA-0.1.0-codigo.zip).
+[Descargar ZIP de instalación (9,7 MB)](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/heads/sonda-v0.1.0/artifacts/SONDA-0.1.0-instalar.zip) · [Descargar APK para Android](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/heads/sonda-v0.1.0/artifacts/SONDA-0.1.0-debug.apk) · [Descargar código fuente ZIP](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/heads/sonda-v0.1.0/artifacts/SONDA-0.1.0-codigo.zip).
+
+Si abres el enlace desde ChatGPT y falla la descarga, copia el enlace y pégalo en Chrome. Para el ZIP de instalación: abre Mis archivos → Descargas → SONDA-0.1.0-instalar.zip → Extraer; después toca SONDA-0.1.0-debug.apk.
 
 Proyecto Android Kotlin/Compose con diagnóstico de rutas solicitadas/activas, micrófono integrado, salida USB independiente, seno de fase continua con rampa, analizador PSD/espectrograma, grabación WAV float32 y exportación local ZIP. Incluye simulación identificada y núcleo DSP independiente para pruebas JVM. No requiere cuenta ni Internet en el teléfono.
 
