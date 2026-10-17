@@ -67,3 +67,11 @@ El usuario solicita una app separada como módulo de generador. Se añade el mó
 Se implementa salida AudioTrack independiente. Como esta app solo emite, no abre AudioRecord ni necesita permiso de micrófono o una entrada antes de emitir. La selección USB o de altavoz es explícita; la ruta activa se comprueba con el stream en silencio antes de habilitar Emitir. Foco, desconexión, cambio de ruta, error y segundo plano detienen la salida sin rearmar. No se añade servicio de segundo plano ni se establece comunicación entre aplicaciones. Las pruebas con un backend de salida controlado ejercitan los estados sin presentarlos como validación física.
 
 La aplicación independiente no incluye analizador, grabación, exportación de medidas ni simulación de captura. Su guía, compilación y validación se mantienen en `13_GENERADOR_INDEPENDIENTE.md`.
+
+## 2026-10-17 · SONDA Generador 0.2.0, ajuste continuo
+
+El usuario solicita sensación de control analógico mediante un potenciómetro rotatorio o deslizante, además de los pasos. Se elige un deslizador horizontal continuo con escala logarítmica: posición `p` de 0 a 1 → `20 * (máximo/20)^p` Hz. Reparte el recorrido por razones de frecuencia y ofrece manejo directo con un dedo. El máximo procede del sample rate y tipo/banda del generador. Los botones de fracciones y la entrada exacta siguen sincronizados con el mismo estado de frecuencia; el deslizador no encaja en los pasos seleccionados.
+
+Los cambios se aplican en cada evento de arrastre, sin esperar a levantar el dedo. No activan una salida silenciada; si ya se emite, conservan el armado y el nivel. La ruta continua del ruido rosa enlaza dos bancos de filtros preasignados mediante un fundido lineal de 20 ms y retiene la última solicitud durante cada fundido. Así se evita bajar a cero y reiniciar la campana en cada evento. Los ajustes discretos conservan su transición anterior. Los filtros y su normalización se siguen preparando fuera del hilo de audio, sin interpolar coeficientes.
+
+La señal de una campana muy estrecha sigue necesitando asentamiento y su RMS puede variar durante el movimiento. El control continuo es manual; no constituye un barrido de medición. La actualización conserva applicationId e incrementa versionCode a 2 para instalarse sobre SONDA Generador 0.1.0.

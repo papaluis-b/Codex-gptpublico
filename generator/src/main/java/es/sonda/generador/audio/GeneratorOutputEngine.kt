@@ -212,6 +212,7 @@ class GeneratorOutputEngine internal constructor(private val backend: GeneratorA
     }
 
     fun setTone(frequency: Double, level: Double) = configure { it.copy(frequencyHz = frequency, levelDbFs = level) }
+    fun setContinuousFrequency(frequency: Double) = configure(continuousFrequency = true) { it.copy(frequencyHz = frequency) }
     fun setSignalKind(kind: SignalKind) = configure { it.copy(kind = kind) }
     fun setOctaveDivision(division: Int) = configure { it.copy(octaveDivision = division) }
     fun stepFrequency(direction: Int) = configure {
@@ -220,7 +221,7 @@ class GeneratorOutputEngine internal constructor(private val backend: GeneratorA
         it.copy(frequencyHz = OctaveBands.step(it.frequencyHz, it.octaveDivision, direction, maximum))
     }
 
-    private fun configure(change: (GeneratorSettings) -> GeneratorSettings) {
+    private fun configure(continuousFrequency: Boolean = false, change: (GeneratorSettings) -> GeneratorSettings) {
         synchronized(gate) {
             if (closed) return
             val previous = state.value
@@ -229,7 +230,7 @@ class GeneratorOutputEngine internal constructor(private val backend: GeneratorA
             val settings = change(previous.settings).constrained(rate)
             val changedKind = previous.settings.kind != settings.kind
             if (changedKind) generator?.enabled = false
-            generator?.configure(settings)
+            generator?.configure(settings, continuousFrequency)
             val band = generator?.noiseBand ?: if (settings.kind == SignalKind.PINK_NOISE)
                 NoiseBand(settings.frequencyHz, settings.octaveDivision, rate) else null
             _state.update { withSettings(it, settings, band).copy(

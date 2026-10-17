@@ -183,6 +183,45 @@ class GeneratorOutputEngineTest {
         assertFalse(engine.state.value.emitting)
     }
 
+    @Test fun continuousFrequencyOnlyChangesFrequencyAndNeverEnablesOrRearmsOutput() {
+        engine.setOctaveDivision(48)
+        engine.setSignalKind(SignalKind.PINK_NOISE)
+        engine.setTone(1000.0, -32.0)
+        engine.setContinuousFrequency(1200.0)
+        assertFalse(engine.state.value.emitting)
+        assertEquals(SignalKind.PINK_NOISE, engine.state.value.settings.kind)
+        assertEquals(48, engine.state.value.settings.octaveDivision)
+        assertEquals(-32.0, engine.state.value.settings.levelDbFs, 0.0)
+        engine.start(USB)
+        await { engine.state.value.running }
+        engine.setContinuousFrequency(1300.0)
+        assertFalse(engine.state.value.emitting)
+        engine.emit(true)
+        await { backend.sinks.single().nonzeroWrites.get() > 0 }
+        repeat(30) { engine.setContinuousFrequency(1300.0 + it) }
+        assertTrue(engine.state.value.emitting)
+        backend.focusLoss!!.invoke()
+        engine.setContinuousFrequency(1350.0)
+        assertFalse(engine.state.value.emitting)
+        assertFalse(engine.state.value.running)
+        engine.start(USB)
+        await { engine.state.value.running }
+        engine.emit(true)
+        await { backend.sinks.last().nonzeroWrites.get() > 0 }
+        engine.setContinuousFrequency(1375.0)
+        engine.setSignalKind(SignalKind.SINE)
+        assertFalse(engine.state.value.emitting)
+        engine.setContinuousFrequency(1400.0)
+        assertFalse(engine.state.value.emitting)
+        engine.stop("Prueba de interrupción durante arrastre")
+        engine.setContinuousFrequency(1500.0)
+        engine.emit(true)
+        assertFalse(engine.state.value.emitting)
+        assertFalse(engine.state.value.running)
+        assertEquals(1500.0, engine.state.value.settings.frequencyHz, 0.0)
+        assertEquals(-32.0, engine.state.value.settings.levelDbFs, 0.0)
+    }
+
     private fun startAndEmit() {
         engine.start(USB)
         await { engine.state.value.running }

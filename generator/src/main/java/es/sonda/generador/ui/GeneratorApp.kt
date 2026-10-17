@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -24,6 +25,8 @@ import es.sonda.dsp.SignalKind
 import es.sonda.generador.BuildConfig
 import es.sonda.generador.GeneratorViewModel
 import java.util.Locale
+import kotlin.math.ln
+import kotlin.math.pow
 
 private val Teal = Color(0xFF80E1D4)
 private val Amber = Color(0xFFFFD08A)
@@ -45,6 +48,7 @@ fun GeneratorApp(model: GeneratorViewModel) {
     var error by remember(settings.frequencyHz) { mutableStateOf<String?>(null) }
     var slider by remember(settings.kind, settings.levelDbFs) { mutableFloatStateOf(settings.levelDbFs.toFloat()) }
     val maximum = GeneratorSettings.maximumFrequency(state.sampleRate.takeIf { it > 0 } ?: 48000, settings.kind, settings.octaveDivision)
+    val frequencyPosition = (ln(settings.frequencyHz / 20.0) / ln(maximum / 20.0)).coerceIn(0.0, 1.0).toFloat()
     LaunchedEffect(devices) {
         if (devices.none { it.id == selected }) selected = null
     }
@@ -115,6 +119,22 @@ fun GeneratorApp(model: GeneratorViewModel) {
                 }
                 Panel("FRECUENCIA") {
                     Text("${fmt(settings.frequencyHz)} Hz", color = Teal, fontSize = 32.sp, fontFamily = FontFamily.Monospace)
+                    Text("AJUSTE CONTINUO", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Slider(value = frequencyPosition, onValueChange = { position ->
+                        model.engine.setContinuousFrequency(20.0 * (maximum / 20.0).pow(position.toDouble()))
+                    }, valueRange = 0f..1f, steps = 0,
+                        modifier = Modifier.semantics {
+                            contentDescription = "Control continuo de frecuencia"
+                            stateDescription = "${fmt(settings.frequencyHz)} Hz"
+                        })
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                        for (mark in 0..3) {
+                            val hz = 20.0 * (maximum / 20.0).pow(mark / 3.0)
+                            Text(if (hz >= 999.5) "${fmt(hz / 1000, 1)} kHz" else "${fmt(hz, 0)} Hz",
+                                color = Muted, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                        }
+                    }
+                    Text("Arrastra para cambiar la frecuencia de forma continua. Los botones − / + usan el paso de octava.", color = Muted, fontSize = 12.sp)
                     OutlinedTextField(value = frequency, onValueChange = { frequency = it; error = null },
                         label = { Text("Frecuencia · Hz") }, singleLine = true, isError = error != null,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
