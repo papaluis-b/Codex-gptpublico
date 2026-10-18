@@ -7,3 +7,4 @@ local.properties
 .tooling/
 artifacts/
 *.jks
+__pycache__/

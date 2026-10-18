@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "Sonda"
-include(":app", ":generator", ":dsp")
+include(":app", ":generator", ":generator-kit", ":dsp")

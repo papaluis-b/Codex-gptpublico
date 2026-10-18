@@ -75,3 +75,13 @@ El usuario solicita sensación de control analógico mediante un potenciómetro 
 Los cambios se aplican en cada evento de arrastre, sin esperar a levantar el dedo. No activan una salida silenciada; si ya se emite, conservan el armado y el nivel. La ruta continua del ruido rosa enlaza dos bancos de filtros preasignados mediante un fundido lineal de 20 ms y retiene la última solicitud durante cada fundido. Así se evita bajar a cero y reiniciar la campana en cada evento. Los ajustes discretos conservan su transición anterior. Los filtros y su normalización se siguen preparando fuera del hilo de audio, sin interpolar coeficientes.
 
 La señal de una campana muy estrecha sigue necesitando asentamiento y su RMS puede variar durante el movimiento. El control continuo es manual; no constituye un barrido de medición. La actualización conserva applicationId e incrementa versionCode a 2 para instalarse sobre SONDA Generador 0.1.0.
+
+## 2026-10-18 · Conservación y módulo reutilizable
+
+El usuario aprueba SONDA Generador 0.2 y solicita conservarla para integrar o evolucionar dentro o fuera de otras apps. Se fija la referencia aprobada mediante `generador-app-v0.2.0` en el commit `01eb7fab88218c9361dd3a9b4e305ffe086d2ce5`; el APK y ZIP de fuentes originales se conservan byte a byte.
+
+Se extraen motor/modelos/backend y pantalla a `:generator-kit`, biblioteca Android con API propia sin depender de Activity, ViewModel, BuildConfig, icono o identidad de la app. Los paquetes públicos del motor y DSP se mantienen. `:generator` pasa a ser un anfitrión de esa biblioteca. Se preservan los archivos del motor y DSP, sus algoritmos y controles. La pantalla añade parada por pausa o salida de composición sin cerrar el motor propiedad del anfitrión.
+
+Se publican `es.sonda:generator-kit:0.2.0` como AAR y `es.sonda:dsp:0.2.0` como JAR, con fuentes y metadatos transitivos, exclusivamente en un directorio Maven local. Se comprueba la integración con proyectos independientes que consumen esos binarios: Android/Compose y Java/JVM. La etiqueta `generator-kit-v0.2.0` conserva la extracción y su paquete; futuras modificaciones deben usar versiones y etiquetas nuevas.
+
+La entrega incluye binarios, repositorio Maven, fuentes, ejemplos, API, protocolo de validación, referencias Git, checksums y los originales aprobados. El script de empaquetado contrasta los archivos del motor/DSP contra las fuentes aprobadas y registra sus hashes. La licencia general del código propio se mantiene sin asignar; no se elige una nueva licencia como efecto de esta extracción. Guía completa en `14_MODULO_REUTILIZABLE.md`.

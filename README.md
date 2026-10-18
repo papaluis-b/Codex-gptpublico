@@ -3,6 +3,23 @@
 Versión de especificación: 1.0 · 15 de octubre de 2026.
 Nombre provisional, sin decisión de marca. Idioma del producto: español.
 
+## Módulo reutilizable · SONDA Generador Kit 0.2.0
+
+[Guardar el kit completo](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/tags/generator-kit-v0.2.0/artifacts/SONDA-Generador-0.2.0-kit.zip) · [Guía de integración y evolución](docs/14_MODULO_REUTILIZABLE.md) · [Código de la versión conservada](https://github.com/papaluis-b/Codex-gptpublico/tree/generator-kit-v0.2.0).
+
+La versión aprobada queda guardada como biblioteca Android AAR y núcleo DSP JVM JAR, con fuentes, API, repositorio Maven local, dos proyectos de ejemplo, documentación y hashes. El kit incluye el APK original y su ZIP de fuentes en `baseline/`, sin sustituirlos por una recompilación.
+
+La etiqueta [`generador-app-v0.2.0`](https://github.com/papaluis-b/Codex-gptpublico/tree/generador-app-v0.2.0) fija la app aprobada en `01eb7fab88218c9361dd3a9b4e305ffe086d2ce5`; [`generator-kit-v0.2.0`](https://github.com/papaluis-b/Codex-gptpublico/tree/generator-kit-v0.2.0) fija su extracción para reutilizarla. El repositorio es la fuente común; el ZIP permite guardar y llevar el módulo a otro proyecto.
+
+| Pieza | Uso |
+| --- | --- |
+| `:generator-kit` / `es.sonda:generator-kit:0.2.0` | Motor Android y pantalla `GeneratorScreen(engine)`, integrables en otra app. |
+| `:dsp` / `es.sonda:dsp:0.2.0` | Generación y DSP en JVM, sin depender de Android. |
+| `:generator` | App independiente que usa la misma biblioteca como anfitrión. |
+| `examples/generator-host` y `examples/dsp-jvm` | Consumidores externos de los binarios publicados. |
+
+Para generar el kit con las herramientas instaladas: `bash scripts/build-generator-kit.sh`. La guía explica cómo consumir los módulos por fuentes o Maven, gestionar su ciclo de vida, fijar versiones y conservar una base limpia para evolucionar. [Dependencias](DEPENDENCIES.md) · [Estado de licencias](LICENSE_STATUS.md).
+
 ## SONDA Generador 0.2.0 · control continuo de frecuencia
 
 [Descargar instalador ZIP](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/heads/sonda-generador-v0.2.0/artifacts/SONDA-Generador-0.2.0-instalar.zip) · [Descargar APK](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/heads/sonda-generador-v0.2.0/artifacts/SONDA-Generador-0.2.0-debug.apk) · [Código fuente ZIP](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/heads/sonda-generador-v0.2.0/artifacts/SONDA-Generador-0.2.0-codigo.zip).

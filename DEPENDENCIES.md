@@ -4,6 +4,8 @@ Dependencias de aplicación: Kotlin 2.2.21, Jetpack Compose (BOM 2025.10.01), Ac
 
 SONDA (`:app`) y SONDA Generador (`:generator`) usan estas mismas versiones y comparten `:dsp`. La aplicación independiente no añade bibliotecas de audio ni depende del módulo de la aplicación general.
 
+El módulo reutilizable `:generator-kit` expone el motor Android, la pantalla Compose, `:dsp` y StateFlow. Declara coroutines-core 1.8.1 como base de su API y lifecycle-runtime-compose 2.9.4 para el ciclo de vida de la pantalla. Sus binarios release no incluyen dependencias de pruebas. El estado de la licencia del código propio se documenta por separado en `LICENSE_STATUS.md`.
+
 Herramientas: Gradle 8.13 y Android Gradle Plugin 8.13.2 (Apache-2.0); Android SDK Platform 36 y Build-Tools 36.0.0 (licencias Android SDK de cada paquete); Eclipse Temurin JDK 21.0.12.1+1 (GPL-2.0 con Classpath Exception y avisos incluidos en su distribución). El JDK/SDK no se incluyen dentro del APK.
 
 Solo pruebas: JUnit 4.13.2 (EPL-1.0), Hamcrest (BSD-3-Clause), Robolectric 4.16.1 (MIT), AndroidX Test Core 1.7.0 y Runner 1.7.0/Ext JUnit 1.3.0 (Apache-2.0). No se incluyen en la aplicación de producción.
