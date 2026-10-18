@@ -3,6 +3,22 @@
 Versión de especificación: 1.0 · 15 de octubre de 2026.
 Nombre provisional, sin decisión de marca. Idioma del producto: español.
 
+## SONDA Analizador 0.3.0 · RTA, espectrograma y medidas de altavoces
+
+[Descargar instalador ZIP](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/tags/analizador-v0.3.0/artifacts/SONDA-Analizador-0.3.0-instalar.zip) · [APK](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/tags/analizador-v0.3.0/artifacts/SONDA-Analizador-0.3.0-debug.apk) · [Fuentes ZIP](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/tags/analizador-v0.3.0/artifacts/SONDA-Analizador-0.3.0-codigo.zip) · [Guía de uso, medidas y rutas](docs/15_ANALIZADOR_Y_MEDIDAS.md).
+
+RTA y espectrograma en directo como vistas independientes o conjuntas; módulo de medida con barrido logarítmico y pulso pasa-banda de cinco repeticiones. Guarda magnitud relativa y retardo observado de diez registros, **Fuente 1–Fuente 10**, con tiempos y diferencias respecto a la referencia elegida en ms y metros equivalentes. Conserva señales emitidas, capturas, impulso, metadatos, repeticiones y espectros en un archivo local exportable. La simulación está identificada y se mantiene separada de las medidas reales.
+
+Se mantiene micrófono interno + DAC USB. Se añaden entrada de micrófono USB y salida Bluetooth A2DP/BLE como opciones exploratorias, con selección explícita y comprobación de la ruta real. Un DAC debe exponer una entrada para admitir un micrófono; uno de salida solamente no añade esa capacidad. La app no necesita red ni cuentas; requiere permiso de micrófono y, al elegir Bluetooth en Android 12+, dispositivos cercanos. Emparejar Bluetooth desde los ajustes de Android.
+
+El retardo observado incluye latencias residuales del instrumento, procesado y propagación. Sin referencia calibrada no se presenta como delay puro; los metros son una conversión temporal. Bluetooth puede variar entre medidas. Respuesta relativa, sin calibración SPL ni afirmación de respuesta anecoica. La validación física con teléfono, micrófono, DAC y Bluetooth sigue pendiente.
+
+Instala el ZIP desde Chrome si la descarga de ChatGPT falla: Mis archivos → extraer → tocar el APK. Actualiza la app general `es.sonda` a 0.3.0; el generador independiente conserva su propia instalación y versión aprobada. La base del generador sigue fijada en `generator-kit-v0.2.0`.
+
+Compilación y validación: `bash scripts/build-analyzer.sh`. El nuevo núcleo `:measurement-core` es Kotlin/JVM independiente de Android; `:app` lo integra con audio, persistencia e interfaz. Etiqueta de entrega `analizador-v0.3.0`, rama `sonda-analizador-v0.3.0`. No sustituir artefactos anteriores al evolucionar el módulo.
+
+Verificación de software: **102 pruebas superadas**, incluidas señales a 48 kHz, persistencia y exportación, referencias temporales, rutas ausentes, cambios de módulo y cancelación de arranques pendientes. APK compilado y firma comprobada; lint sin errores. Esto no verifica la precisión acústica ni las combinaciones de hardware reales.
+
 ## Módulo reutilizable · SONDA Generador Kit 0.2.0
 
 [Guardar el kit completo](https://github.com/papaluis-b/Codex-gptpublico/raw/refs/tags/generator-kit-v0.2.0/artifacts/SONDA-Generador-0.2.0-kit.zip) · [Guía de integración y evolución](docs/14_MODULO_REUTILIZABLE.md) · [Código de la versión conservada](https://github.com/papaluis-b/Codex-gptpublico/tree/generator-kit-v0.2.0).

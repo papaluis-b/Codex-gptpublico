@@ -82,7 +82,7 @@ class AudioEngine(context: Context, private val captures: CaptureStore) {
             manager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)).map { it.describe() }
     }
 
-    fun start(outputDeviceId: Int?, simulation: Boolean) {
+    fun start(outputDeviceId: Int?, simulation: Boolean, inputDeviceId: Int? = null) {
         if (closed) return
         val ticket = synchronized(sessionLock) { token.incrementAndGet() }
         emergencySilence()
@@ -100,7 +100,7 @@ class AudioEngine(context: Context, private val captures: CaptureStore) {
                 inputFrames.set(0); outputFrames.set(0); stopNote = ""
             }
             try {
-                if (simulation) prepareSimulation(ticket) else prepareHardware(outputDeviceId, ticket)
+                if (simulation) prepareSimulation(ticket) else prepareHardware(outputDeviceId, ticket, inputDeviceId)
             } catch (e: Exception) {
                 stop("No se pudo iniciar: ${e.message ?: e.javaClass.simpleName}")
             }
@@ -108,11 +108,13 @@ class AudioEngine(context: Context, private val captures: CaptureStore) {
     }
 
     @SuppressLint("MissingPermission")
-    private fun prepareHardware(outputId: Int?, ticket: Long) {
-        val input = manager.getDevices(AudioManager.GET_DEVICES_INPUTS).firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_MIC }
-            ?: error("No se encontró micrófono integrado")
+    private fun prepareHardware(outputId: Int?, ticket: Long, inputId: Int?) {
+        val input = manager.getDevices(AudioManager.GET_DEVICES_INPUTS).firstOrNull {
+            if (inputId == null) it.type == AudioDeviceInfo.TYPE_BUILTIN_MIC
+            else it.id == inputId && (it.isUsb() || it.type == AudioDeviceInfo.TYPE_BUILTIN_MIC)
+        } ?: error("La entrada seleccionada no está disponible; no se sustituye por otra")
         val output = outputId?.let { id ->
-            manager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).firstOrNull { it.id == id && (it.isUsb() || it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) }
+            manager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).firstOrNull { it.id == id && (it.isUsb() || it.isBluetoothOutput() || it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) }
                 ?: error("La salida seleccionada ya no está disponible")
         }
         val declared = manager.getProperty(AudioManager.PROPERTY_SUPPORT_AUDIO_SOURCE_UNPROCESSED) == "true"
@@ -125,7 +127,7 @@ class AudioEngine(context: Context, private val captures: CaptureStore) {
             .setBufferSizeInBytes(maxOf(minimum * 4, 8192 * 4)).build()
         record = rec
         check(rec.state == AudioRecord.STATE_INITIALIZED) { "Micrófono ocupado o formato no disponible" }
-        check(rec.setPreferredDevice(input)) { "Android rechazó la entrada integrada solicitada" }
+        check(rec.setPreferredDevice(input)) { "Android rechazó la entrada solicitada" }
         rec.addOnRoutingChangedListener(routeListener, main)
         val effectStatus = disableEffects(rec.audioSessionId)
 
@@ -183,7 +185,9 @@ class AudioEngine(context: Context, private val captures: CaptureStore) {
             routesArmed.set(true)
             _state.update { it.copy(preparing = false, running = true, routingVerified = true,
                 activeInput = rec.routedDevice!!.routeName(), activeOutput = track?.routedDevice?.routeName() ?: "Sin salida",
-                message = "Micrófono interno · ruta confirmada. Procesado del micrófono sin validar.") }
+                message = if (output?.isBluetoothOutput() == true)
+                    "Ruta Bluetooth experimental confirmada; latencia variable. Procesado del micrófono sin validar."
+                else "Entrada seleccionada · ruta confirmada. Procesado del micrófono sin validar.") }
         }
         event("Streams abiertos en silencio; rutas confirmadas")
         startProcessor(false)
@@ -401,7 +405,7 @@ class AudioEngine(context: Context, private val captures: CaptureStore) {
         recordingRequested = !recordingRequested
     }
 
-    fun stop(reason: String = "Audio detenido") {
+    fun stop(reason: String = "Audio detenido", onStopped: (() -> Unit)? = null) {
         val stopTicket = synchronized(sessionLock) {
             val ticket = token.incrementAndGet()
             stopNote = if (reason == "Audio detenido") "" else reason
@@ -412,7 +416,12 @@ class AudioEngine(context: Context, private val captures: CaptureStore) {
         emergencySilence()
         recordingRequested = false
         event(reason)
-        if (!closed) control.execute { if (closed || token.get() == stopTicket) shutdown() }
+        if (!closed) control.execute {
+            if (closed || token.get() == stopTicket) {
+                shutdown()
+                if (!closed && token.get() == stopTicket) onStopped?.invoke()
+            }
+        }
     }
 
     private fun emergencySilence() {

@@ -31,11 +31,14 @@ import es.sonda.PlotFrame
 import es.sonda.SondaViewModel
 import es.sonda.BuildConfig
 import es.sonda.audio.AudioState
+import es.sonda.audio.AudioDevice
+import es.sonda.audio.BluetoothOutputTypes
 import es.sonda.data.SavedCapture
 import es.sonda.dsp.Spectrum
 import es.sonda.dsp.OctaveBands
 import es.sonda.dsp.SignalKind
 import es.sonda.dsp.GeneratorSettings
+import es.sonda.measurement.MeasurementConfig
 import java.util.Locale
 import kotlin.math.*
 
@@ -47,31 +50,52 @@ private val Background = Color(0xFF101411)
 private fun fmt(value: Double, decimals: Int = 1) = String.format(Locale.getDefault(), "%.${decimals}f", value)
 
 @Composable
-fun SondaApp(model: SondaViewModel, onStart: (Int?, Boolean) -> Unit, onShare: (SavedCapture) -> Unit) {
+fun SondaApp(
+    model: SondaViewModel,
+    onStart: (Int?, Boolean) -> Unit,
+    onShare: (SavedCapture) -> Unit,
+    onMeasure: (MeasurementConfig, Int?, Int) -> Unit = { config, input, output -> model.startMeasurement(config, input, output) },
+    onExportMeasurements: () -> Unit = {},
+) {
     val state by model.engine.state.collectAsState()
     val devices by model.engine.devices.collectAsState()
+    val selectedInput by model.selectedInput.collectAsState()
+    val measurement by model.measurement.state.collectAsState()
+    val measurementAudio by model.measurement.audio.state.collectAsState()
+    val measurementDevices by model.measurement.audio.devices.collectAsState()
     val plot by model.plot.collectAsState()
     val captures by model.captures.collectAsState()
     val exportError by model.exportError.collectAsState()
     var page by rememberSaveableInt()
     var diagnostics by remember { mutableStateOf(false) }
     var share by remember { mutableStateOf<SavedCapture?>(null) }
+    val measuringPage = page == 1
+    DisposableEffect(model, measuringPage) {
+        if (measuringPage) model.stopAll("Módulo de medida abierto · audio en silencio")
+        onDispose { if (measuringPage) model.stopAll("Módulo de medida cerrado") }
+    }
+    fun navigate(destination: Int) {
+        if (destination == page) return
+        if (page == 1 || destination == 1) model.stopAll("Cambio de módulo · audio detenido")
+        page = destination
+    }
     MaterialTheme(colorScheme = darkColorScheme(primary = Lime, onPrimary = Background,
         background = Background, surface = Surface, onSurface = Color(0xFFF0F5ED),
         secondary = Amber, error = Color(0xFFFF9C97))) {
         Scaffold(containerColor = Background, bottomBar = {
             Column(Modifier.navigationBarsPadding().background(Surface)) {
-                if (state.running || state.preparing) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { model.engine.emit(false) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                val active = if (page == 1) measurementAudio.running || measurementAudio.preparing else state.running || state.preparing
+                if (active) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { if (page == 1) model.measurement.stop() else model.engine.emit(false) }, modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B3330), contentColor = Color.White)) {
                         Text("SILENCIO", fontWeight = FontWeight.Bold)
                     }
-                    OutlinedButton(onClick = { model.engine.stop() }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Detener todo") }
+                    OutlinedButton(onClick = { model.stopAll() }, modifier = Modifier.heightIn(min = 48.dp)) { Text("Detener todo") }
                 }
                 NavigationBar(containerColor = Surface) {
-                    listOf("Analizar", "Generar", "Capturas").forEachIndexed { i, title ->
-                        NavigationBarItem(selected = page == i, onClick = { page = i }, icon = {
-                            Text(listOf("∿", "◉", "▤")[i], fontSize = 23.sp)
+                    listOf("Analizar", "Medir", "Generar", "Capturas").forEachIndexed { i, title ->
+                        NavigationBarItem(selected = page == i, onClick = { navigate(i) }, icon = {
+                            Text(listOf("∿", "↔", "◉", "▤")[i], fontSize = 23.sp)
                         }, label = { Text(title) })
                     }
                 }
@@ -84,47 +108,24 @@ fun SondaApp(model: SondaViewModel, onStart: (Int?, Boolean) -> Unit, onShare: (
                         Text("SONDA", fontSize = 27.sp, fontWeight = FontWeight.Bold, letterSpacing = 4.sp)
                         Text("AUDIO / DIAGNÓSTICO", color = Muted, fontSize = 11.sp, letterSpacing = 1.5.sp)
                     }
-                    TextButton(onClick = { diagnostics = !diagnostics }) { Text(if (diagnostics) "Cerrar detalle" else "Diagnóstico") }
+                    if (page != 1) TextButton(onClick = { diagnostics = !diagnostics }) { Text(if (diagnostics) "Cerrar detalle" else "Diagnóstico") }
                 }
-                Status(state)
-                if (diagnostics) Diagnostics(state, devices.map { "${it.name} (#${it.id}, ${if (it.input) "entrada" else "salida"}, tipo ${it.kind})\n${it.capabilities}" })
-                if (!state.running && !state.preparing) {
-                    var selected by remember { mutableStateOf<Int?>(null) }
-                    var chosen by remember { mutableStateOf(false) }
-                    var menu by remember { mutableStateOf(false) }
-                    val outputs = devices.filter { !it.input && it.kind in setOf(AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET,
-                        AudioDeviceInfo.TYPE_USB_ACCESSORY, AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) }
-                    LaunchedEffect(outputs) {
-                        if (!chosen) selected = outputs.firstOrNull { it.kind != AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }?.id
-                        if (selected != null && outputs.none { it.id == selected }) selected = null
-                    }
-                    val selectedDevice = outputs.firstOrNull { it.id == selected }
-                    Panel("INICIAR SESIÓN") {
-                        Box {
-                            OutlinedButton(onClick = { menu = true }, modifier = Modifier.fillMaxWidth()) {
-                                Text(when {
-                                    selectedDevice == null -> "Solo micrófono · sin emisión"
-                                    selectedDevice.kind == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "Altavoz interno · modo de prueba"
-                                    else -> "USB · ${selectedDevice.name}"
-                                })
-                            }
-                            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                                DropdownMenuItem(text = { Text("Solo micrófono · sin emisión") }, onClick = { selected = null; chosen = true; menu = false })
-                                outputs.forEach { device ->
-                                    DropdownMenuItem(text = { Text(if (device.kind == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
-                                        "Altavoz interno · prueba explícita" else "USB · ${device.name}") }, onClick = { selected = device.id; chosen = true; menu = false })
-                                }
-                            }
-                        }
-                        Button(onClick = { onStart(selected, false) }, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Iniciar audio real") }
-                        TextButton(onClick = { onStart(null, true) }, modifier = Modifier.fillMaxWidth()) { Text("Explorar simulación sin micrófono") }
-                        if (outputs.none { it.kind != AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }) Text("Salida USB no conectada. Puedes analizar el micrófono.", color = Muted, fontSize = 12.sp)
-                    }
+                if (page != 1) {
+                    Status(state)
+                    if (diagnostics) Diagnostics(state, devices.map { "${it.name} (#${it.id}, ${if (it.input) "entrada" else "salida"}, tipo ${it.kind})\n${it.capabilities}" })
+                    if (!state.running && !state.preparing) SessionControls(devices, selectedInput, model::selectInput, onStart)
                 }
                 when (page) {
                     0 -> Analyzer(model, state, plot)
-                    1 -> Generator(model, state)
-                    2 -> {
+                    1 -> MeasurementScreen(
+                        state = measurement, audio = measurementAudio, devices = measurementDevices,
+                        onMeasure = onMeasure, onStop = { model.measurement.stop() },
+                        onDemo = { model.demoMeasurement(it) }, onSave = { model.measurement.save(it) },
+                        onClear = { model.measurement.clear(it) }, onExport = onExportMeasurements,
+                        onReference = { model.measurement.setReference(it) }, onSpeed = { model.measurement.setSpeed(it) },
+                    )
+                    2 -> Generator(model, state)
+                    3 -> {
                         Text("Capturas locales", style = MaterialTheme.typography.headlineSmall)
                         Text("WAV float32 original + diagnóstico JSON + último espectro CSV. Cada grabación dura hasta 120 s.", color = Muted, fontSize = 13.sp)
                         if (captures.isEmpty()) Panel("SIN CAPTURAS") { Text("Inicia audio y pulsa Grabar WAV para guardar tu primera captura.") }
@@ -150,7 +151,64 @@ fun SondaApp(model: SondaViewModel, onStart: (Int?, Boolean) -> Unit, onShare: (
     }
 }
 
-@Composable private fun rememberSaveableInt() = androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }
+@Composable private fun rememberSaveableInt(initial: Int = 0) = androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(initial) }
+
+private val UsbTypes = setOf(AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET, AudioDeviceInfo.TYPE_USB_ACCESSORY)
+private val BluetoothTypes = BluetoothOutputTypes
+
+private fun outputLabel(device: AudioDevice) = when (device.kind) {
+    AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "Altavoz interno · prueba explícita"
+    in UsbTypes -> "USB · ${device.name}"
+    else -> "Bluetooth · exploratorio · ${device.name}"
+}
+
+@Composable private fun SessionControls(devices: List<AudioDevice>, selectedInput: Int?, onInput: (Int?) -> Unit, onStart: (Int?, Boolean) -> Unit) {
+    var selected by remember { mutableStateOf<Int?>(null) }
+    var chosen by remember { mutableStateOf(false) }
+    var outputMenu by remember { mutableStateOf(false) }
+    var inputMenu by remember { mutableStateOf(false) }
+    val inputs = devices.filter { it.input && it.kind in UsbTypes }
+    val outputs = devices.filter { !it.input && (it.kind in UsbTypes || it.kind in BluetoothTypes || it.kind == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) }
+    LaunchedEffect(outputs) {
+        if (!chosen) selected = outputs.firstOrNull { it.kind in UsbTypes }?.id
+    }
+    val input = inputs.firstOrNull { it.id == selectedInput }
+    val output = outputs.firstOrNull { it.id == selected }
+    val inputAvailable = selectedInput == null || input != null
+    val outputAvailable = selected == null || output != null
+    Panel("INICIAR SESIÓN") {
+        Text("Entrada", color = Muted, fontSize = 11.sp)
+        Box {
+            OutlinedButton(onClick = { inputMenu = true }, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Elegir entrada de audio" }) {
+                Text(if (selectedInput == null) "Micrófono interno" else input?.let { "USB · ${it.name}" } ?: "Entrada USB no disponible")
+            }
+            DropdownMenu(expanded = inputMenu, onDismissRequest = { inputMenu = false }) {
+                DropdownMenuItem(text = { Text("Micrófono interno") }, onClick = { onInput(null); inputMenu = false })
+                inputs.forEach { device ->
+                    DropdownMenuItem(text = { Text("USB · ${device.name}") }, onClick = { onInput(device.id); inputMenu = false })
+                }
+            }
+        }
+        Text("Salida", color = Muted, fontSize = 11.sp)
+        Box {
+            OutlinedButton(onClick = { outputMenu = true }, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Elegir salida de audio" }) {
+                Text(output?.let(::outputLabel) ?: if (selected == null) "Solo micrófono · sin emisión" else "Salida seleccionada no disponible")
+            }
+            DropdownMenu(expanded = outputMenu, onDismissRequest = { outputMenu = false }) {
+                DropdownMenuItem(text = { Text("Solo micrófono · sin emisión") }, onClick = { selected = null; chosen = true; outputMenu = false })
+                outputs.forEach { device ->
+                    DropdownMenuItem(text = { Text(outputLabel(device)) }, onClick = { selected = device.id; chosen = true; outputMenu = false })
+                }
+            }
+        }
+        if (output?.kind?.let { it in BluetoothTypes } == true) Text("Bluetooth es exploratorio: latencia y procesado sin validar.", color = Amber, fontSize = 12.sp)
+        if (!inputAvailable || !outputAvailable) Text("Vuelve a seleccionar las rutas disponibles antes de iniciar.", color = Amber, fontSize = 12.sp)
+        Button(onClick = { onStart(selected, false) }, enabled = inputAvailable && outputAvailable,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp)) { Text("Iniciar audio real") }
+        TextButton(onClick = { onStart(null, true) }, modifier = Modifier.fillMaxWidth()) { Text("Explorar simulación sin micrófono") }
+        if (outputs.none { it.kind in UsbTypes }) Text("Salida USB no conectada. Puedes analizar la entrada elegida.", color = Muted, fontSize = 12.sp)
+    }
+}
 
 @Composable private fun Status(state: AudioState) {
     Surface(color = if (state.simulation) Color(0xFF372D1D) else Surface, shape = RoundedCornerShape(12.dp)) {
@@ -158,10 +216,11 @@ fun SondaApp(model: SondaViewModel, onStart: (Int?, Boolean) -> Unit, onShare: (
             Text(when {
                 state.simulation -> "SIMULACIÓN · DATOS SINTÉTICOS"
                 state.preparing -> "ABRIENDO STREAMS EN SILENCIO"
-                state.running -> "MICRÓFONO INTERNO · RUTA CONFIRMADA"
+                state.running -> if (state.routingVerified) "ENTRADA ACTIVA · RUTA CONFIRMADA" else "ENTRADA ACTIVA · RUTA SIN VERIFICAR"
                 else -> "AUDIO DETENIDO"
             }, color = if (state.simulation) Amber else Lime, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             if (state.running) {
+                Text("Entrada: ${if (state.simulation) "sintética" else state.activeInput}", fontSize = 12.sp, maxLines = 2)
                 Text("Salida: ${if (state.simulation) "ninguna" else state.activeOutput}", fontSize = 12.sp, maxLines = 2)
                 Text("${if (state.recording) "● GRABANDO" else "Captura activa"}  /  ${if (state.emitting) "${state.signalKind.label.uppercase()} ACTIVO" else "Emisión en silencio"}", fontSize = 12.sp)
             }
@@ -183,33 +242,50 @@ fun SondaApp(model: SondaViewModel, onStart: (Int?, Boolean) -> Unit, onShare: (
     var frozen by remember { mutableStateOf(model.frozen) }
     var hold by remember { mutableStateOf(model.hold) }
     var cursor by remember { mutableDoubleStateOf(1000.0) }
-    Text("Espectro en directo", style = MaterialTheme.typography.headlineSmall)
-    Text("Densidad de potencia · dBFS/Hz", color = Muted, fontSize = 12.sp)
+    var module by rememberSaveableInt(2)
+    Text("Análisis en directo", style = MaterialTheme.typography.headlineSmall)
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf("RTA", "Espectrograma", "Ambos").forEachIndexed { index, title ->
+            FilterChip(selected = module == index, onClick = { module = index }, label = { Text(title) })
+        }
+    }
     val spectrum = plot?.analysis?.spectrum
-    SpectrumChart(plot, cursor) { cursor = it }
-    Text("Escala vertical: −130 a −10 dBFS/Hz", color = Muted, fontSize = 11.sp)
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text("20 Hz", fontSize = 11.sp, color = Muted); Text("100", fontSize = 11.sp, color = Muted)
-        Text("1 k", fontSize = 11.sp, color = Muted); Text("20 kHz", fontSize = 11.sp, color = Muted)
+    if (module != 1) {
+        Text("RTA · Densidad de potencia · dBFS/Hz", color = Muted, fontSize = 12.sp)
+        SpectrumChart(plot, cursor) { cursor = it }
+        Text("Escala vertical: −130 a −10 dBFS/Hz", color = Muted, fontSize = 11.sp)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("20 Hz", fontSize = 11.sp, color = Muted); Text("100", fontSize = 11.sp, color = Muted)
+            Text("1 k", fontSize = 11.sp, color = Muted); Text("20 kHz", fontSize = 11.sp, color = Muted)
+        }
     }
     if (spectrum != null) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column { Text("RMS", color = Muted, fontSize = 11.sp); Text("${fmt(Spectrum.db(spectrum.rms))} dBFS", fontFamily = FontFamily.Monospace) }
             Column { Text("PICO DIGITAL", color = Muted, fontSize = 11.sp); Text("${fmt(Spectrum.db(spectrum.peak))} dBFS", fontFamily = FontFamily.Monospace) }
         }
-        val bin = (cursor / spectrum.binHz).roundToInt().coerceIn(1, spectrum.psd.lastIndex)
-        Text("Cursor: bin ${fmt(bin * spectrum.binHz)} Hz · ${fmt(Spectrum.db(plot!!.averagedPower[bin], true))} dBFS/Hz", color = Lime, fontSize = 12.sp)
+        if (module != 1) {
+            val bin = (cursor / spectrum.binHz).roundToInt().coerceIn(1, spectrum.psd.lastIndex)
+            Text("Cursor: bin ${fmt(bin * spectrum.binHz)} Hz · ${fmt(Spectrum.db(plot!!.averagedPower[bin], true))} dBFS/Hz", color = Lime, fontSize = 12.sp)
+        }
         Text("Hann · FFT ${spectrum.size} · Δf ${fmt(spectrum.binHz, 2)} Hz · ventana ${fmt(spectrum.durationMs)} ms · media de potencia 1 s", color = Muted, fontSize = 11.sp)
     } else Text("Inicia audio para ver el espectro. No se muestran datos inventados.", color = Muted, fontSize = 13.sp)
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FilterChip(selected = frozen, onClick = { frozen = !frozen; model.frozen = frozen }, label = { Text(if (frozen) "Congelado" else "Congelar") })
-        FilterChip(selected = hold, onClick = { hold = !hold; model.hold = hold; model.clearPeaks() }, label = { Text("Máximos") })
-        if (hold) TextButton(onClick = { model.clearPeaks() }) { Text("Reiniciar") }
+        if (module != 1) {
+            FilterChip(selected = hold, onClick = { hold = !hold; model.hold = hold; model.clearPeaks() }, label = { Text("Máximos") })
+            if (hold) TextButton(onClick = { model.clearPeaks() }) { Text("Reiniciar") }
+        }
     }
-    OutlinedButton(onClick = { model.engine.setTone(cursor, state.levelDbFs) }) { Text("Usar ${fmt(cursor, 0)} Hz en el generador") }
-    Panel("ESPECTROGRAMA · DATOS SIN PROMEDIAR") {
+    if (module != 1) OutlinedButton(onClick = { model.engine.setTone(cursor, state.levelDbFs) }) { Text("Usar ${fmt(cursor, 0)} Hz en el generador") }
+    if (module != 0) Panel("ESPECTROGRAMA · DATOS SIN PROMEDIAR") {
         Spectrogram(plot)
-        Text("Antiguo arriba / reciente abajo · color fijo −110 a −30 dBFS/Hz · ${fmt((spectrum?.durationMs ?: 170.67) * 90 / 1000)} s · huecos sin rellenar", color = Muted, fontSize = 11.sp)
+        val clock = spectrogramClock(plot)
+        if (clock != null) {
+            Text("Tiempo de captura: ${fmt(clock.startFrame.toDouble() / clock.sampleRate, 2)}–${fmt(clock.endFrame.toDouble() / clock.sampleRate, 2)} s · ventana ${fmt(clock.span.toDouble() / clock.sampleRate, 2)} s",
+                color = Muted, fontSize = 11.sp)
+        } else Text("Sin muestras para el espectrograma.", color = Muted, fontSize = 11.sp)
+        Text("${if (frozen) "Congelado" else "Antiguo arriba / reciente abajo"} · color fijo −110 a −30 dBFS/Hz · negro: muestras o bins ausentes, sin interpolar", color = Muted, fontSize = 11.sp)
     }
     if (state.droppedFrames > 0 || state.clippedSamples > 0 || state.discontinuities > 0 || state.generatorClippedSamples > 0) {
         Text("REVISAR · clipping entrada ${state.clippedSamples} / generador ${state.generatorClippedSamples} muestras · cola perdida ${state.droppedFrames} · discontinuidades ${state.discontinuities}", color = Amber, fontSize = 12.sp)
@@ -338,19 +414,33 @@ fun SondaApp(model: SondaViewModel, onStart: (Int?, Boolean) -> Unit, onShare: (
     }
 }
 
+private data class SpectrogramClock(val startFrame: Long, val endFrame: Long, val sampleRate: Int) {
+    val span get() = endFrame - startFrame
+}
+
+private fun spectrogramClock(frame: PlotFrame?): SpectrogramClock? {
+    val last = frame?.history?.lastOrNull() ?: return null
+    val end = last.firstCaptureFrame + last.spectrum.size
+    if (end <= 0 || last.spectrum.sampleRate <= 0) return null
+    val start = maxOf(0L, end - last.spectrum.size * 90L)
+    return SpectrogramClock(start, end, last.spectrum.sampleRate)
+}
+
 @Composable private fun Spectrogram(frame: PlotFrame?) {
-    Canvas(Modifier.fillMaxWidth().height(130.dp).background(Background)
+    Canvas(Modifier.fillMaxWidth().height(130.dp).background(Color.Black)
         .semantics { contentDescription = "Espectrograma: frecuencia logarítmica horizontal y tiempo vertical. Color de menos 110 a menos 30 dBFS por hercio." }) {
         val rows = frame?.history ?: return@Canvas
-        val binHz = frame.analysis.spectrum.binHz
+        val clock = spectrogramClock(frame) ?: return@Canvas
         val columns = 96
-        val rowHeight = size.height / 90
-        val latestFrame = rows.lastOrNull()?.firstCaptureFrame ?: return@Canvas
-        val frameSpan = frame.analysis.spectrum.size * 90.0
         for (row in rows) {
+            if (row.spectrum.sampleRate != clock.sampleRate) continue
+            val firstFrame = maxOf(row.firstCaptureFrame, clock.startFrame)
+            val endFrame = minOf(row.firstCaptureFrame + row.spectrum.size, clock.endFrame)
+            if (endFrame <= firstFrame) continue
+            val binHz = row.spectrum.binHz
             val values = row.spectrum.psd
-            val rowTop = size.height * (1.0 - (latestFrame - row.firstCaptureFrame + row.spectrum.size) / frameSpan).toFloat()
-            if (rowTop < 0) continue
+            val rowTop = size.height * ((firstFrame - clock.startFrame).toDouble() / clock.span).toFloat()
+            val rowHeight = size.height * ((endFrame - firstFrame).toDouble() / clock.span).toFloat()
             for (column in 0 until columns) {
                 val frequency = 20.0 * 1000.0.pow((column + 0.5) / columns)
                 val bin = (frequency / binHz).roundToInt()
@@ -366,7 +456,7 @@ fun SondaApp(model: SondaViewModel, onStart: (Int?, Boolean) -> Unit, onShare: (
                 val intensity = ((Spectrum.db(power, true) + 110) / 80).coerceIn(0.0, 1.0).toFloat()
                 val color = Color(0.06f + 0.64f * intensity, 0.12f + 0.82f * intensity, 0.15f + 0.24f * intensity)
                 drawRect(color, Offset(column * size.width / columns, rowTop),
-                    androidx.compose.ui.geometry.Size(size.width / columns + 0.5f, rowHeight + 0.5f))
+                    androidx.compose.ui.geometry.Size(size.width / columns + 0.5f, rowHeight))
             }
         }
     }

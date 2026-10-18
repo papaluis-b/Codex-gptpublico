@@ -1,6 +1,7 @@
 package es.sonda.audio
 
 import android.media.AudioDeviceInfo
+import android.os.Build
 import es.sonda.dsp.Spectrum
 import es.sonda.dsp.GeneratorSettings
 import es.sonda.dsp.SignalKind
@@ -11,6 +12,14 @@ fun AudioDeviceInfo.describe() = AudioDevice(
     "Hz declarados: ${sampleRates.joinToString().ifEmpty { "dinámicos" }} · canales: ${channelCounts.joinToString().ifEmpty { "dinámicos" }}",
 )
 fun AudioDeviceInfo.isUsb() = type in setOf(AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET, AudioDeviceInfo.TYPE_USB_ACCESSORY)
+val BluetoothOutputTypes: Set<Int> = buildSet {
+    add(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)
+    if (Build.VERSION.SDK_INT >= 31) {
+        add(AudioDeviceInfo.TYPE_BLE_HEADSET)
+        add(AudioDeviceInfo.TYPE_BLE_SPEAKER)
+    }
+}
+fun AudioDeviceInfo.isBluetoothOutput() = type in BluetoothOutputTypes
 fun AudioDeviceInfo.routeName() = "${productName} (#$id, tipo $type)"
 
 data class AudioState(

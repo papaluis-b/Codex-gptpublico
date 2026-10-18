@@ -8,16 +8,23 @@ import es.sonda.audio.AudioEngine
 import es.sonda.data.CaptureStore
 import es.sonda.data.SavedCapture
 import es.sonda.dsp.PowerAverage
+import es.sonda.measurement.MeasurementConfig
+import es.sonda.measurement.MeasurementController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.atomic.AtomicLong
 
 class SondaViewModel(application: Application) : AndroidViewModel(application) {
     private val store = CaptureStore(application)
     val engine = AudioEngine(application, store)
+    val measurement = MeasurementController(application)
+    private val audioTransition = AtomicLong()
+    private val _selectedInput = MutableStateFlow<Int?>(null)
+    val selectedInput = _selectedInput.asStateFlow()
     private val _captures = MutableStateFlow<List<SavedCapture>>(emptyList())
     val captures = _captures.asStateFlow()
     private val _plot = MutableStateFlow<PlotFrame?>(null)
@@ -58,6 +65,31 @@ class SondaViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     fun clearPeaks() { resetHold = true }
+    fun selectInput(id: Int?) { _selectedInput.value = id }
+    fun startAnalysis(output: Int?, simulation: Boolean, input: Int? = selectedInput.value) {
+        val ticket = audioTransition.incrementAndGet()
+        measurement.stop("Iniciando analizador")
+        measurement.audio.afterStopped {
+            viewModelScope.launch { if (ticket == audioTransition.get()) engine.start(output, simulation, input) }
+        }
+    }
+    fun startMeasurement(config: MeasurementConfig, input: Int?, output: Int) {
+        val ticket = audioTransition.incrementAndGet()
+        measurement.request(config, input, output) { ready ->
+            viewModelScope.launch { if (ticket == audioTransition.get()) engine.stop("Sesión de medida", ready) }
+        }
+    }
+    fun demoMeasurement(config: MeasurementConfig) {
+        val ticket = audioTransition.incrementAndGet()
+        measurement.demo(config) { ready ->
+            viewModelScope.launch { if (ticket == audioTransition.get()) engine.stop("Simulación de medida", ready) }
+        }
+    }
+    fun stopAll(reason: String = "Audio detenido") {
+        audioTransition.incrementAndGet()
+        measurement.stop(reason)
+        engine.stop(reason)
+    }
     fun refreshCaptures() { viewModelScope.launch(Dispatchers.IO) { _captures.value = store.list() } }
     fun export(id: String, ready: (File) -> Unit) {
         _exportError.value = null
@@ -66,6 +98,6 @@ class SondaViewModel(application: Application) : AndroidViewModel(application) {
                 .onSuccess(ready).onFailure { _exportError.value = it.message ?: "No se pudo exportar" }
         }
     }
-    override fun onCleared() { engine.close() }
+    override fun onCleared() { stopAll("Aplicación cerrada"); measurement.close(); engine.close() }
 }
 data class PlotFrame(val analysis: AnalysisFrame, val averagedPower: DoubleArray, val peaks: DoubleArray?, val history: List<AnalysisFrame>)
