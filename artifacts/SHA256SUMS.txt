@@ -14,3 +14,6 @@ f803e15f82da3a67e157d713f8b0d069b8433e33c90c39f9aaaba40dd6b234e5  SONDA-Generado
 b186bf425fd5122c41deb7da7cc161d0e495391a2502e7be037cb1e23f97614c  SONDA-Analizador-0.3.0-debug.apk
 753cffe8ad3a872b1700f90fb59dc0b57bd31e371f00dc0e4b1ada7b01be7e47  SONDA-Analizador-0.3.0-codigo.zip
 e656ed85bd8f26bc8b715093073d1464c240e0c0093a994b2a91d2810094f47e  SONDA-Analizador-0.3.0-instalar.zip
+40c94b7cca858f00c06dd8ea0d7324a38e8a7a7e9f56cbfe322a7a662939ade8  SONDA-Analizador-0.3.1-debug.apk
+87c7e3aa3286221dfad55bf88acaa627924c19faba09b1552ee96b9ce208a15d  SONDA-Analizador-0.3.1-codigo.zip
+c46747c95061ae0a5a8e541318522102081d337681662cf3cd835638b2cc1a3f  SONDA-Analizador-0.3.1-instalar.zip
