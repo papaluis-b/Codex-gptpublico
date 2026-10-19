@@ -64,6 +64,7 @@ import es.sonda.measurement.audio.MeasurementAudioState
 import es.sonda.measurement.data.SourceSlot
 import es.sonda.measurement.data.compareSources
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.log10
@@ -73,6 +74,7 @@ data class MeasurementUiState(
     val busy: Boolean = false,
     val message: String = "Selecciona la señal y las rutas para medir",
     val result: MeasurementResult? = null,
+    val resultComparisonKey: String? = null,
     val canSave: Boolean = false,
     val syntheticResult: Boolean = false,
     val slots: List<SourceSlot> = (1..10).map { SourceSlot(it) },
@@ -88,6 +90,12 @@ private val MeasureAmber = Color(0xFFFFCE76)
 private val MeasureBackground = Color(0xFF101411)
 private fun measurementNumber(value: Double, decimals: Int = 2) =
     if (value.isFinite()) String.format(Locale.getDefault(), "%.${decimals}f", value) else "—"
+private fun measurementSigned(value: Double): String = when {
+    !value.isFinite() -> "—"
+    abs(value) < 0.005 -> measurementNumber(0.0)
+    value > 0.0 -> "+${measurementNumber(value)}"
+    else -> measurementNumber(value)
+}
 
 /** Stateless measurement actions; selection never opens a stream or emits audio. */
 @Composable
@@ -116,7 +124,8 @@ fun MeasurementScreen(
     var targetSlot by rememberSaveable { mutableIntStateOf(1) }
     var replacement by remember { mutableStateOf<Int?>(null) }
     var deletion by remember { mutableStateOf<Int?>(null) }
-    var differences by rememberSaveable { mutableStateOf(false) }
+    var differences by rememberSaveable { mutableStateOf(true) }
+    var resultDiagnostics by rememberSaveable { mutableStateOf(false) }
     var curveSlot by rememberSaveable { mutableStateOf<Int?>(null) }
     var overlay by rememberSaveable { mutableStateOf(false) }
     var speedText by rememberSaveable(state.speedMetersPerSecond) {
@@ -150,13 +159,14 @@ fun MeasurementScreen(
     ) else null
     val busy = state.busy || audio.preparing || audio.running
     val referenceName = "Fuente ${state.reference}"
+    val referenceRecord = state.slots.firstOrNull { it.number == state.reference }?.measurement
     val comparisons = remember(state.slots, state.reference, state.speedMetersPerSecond) {
         compareSources(state.slots, state.reference, state.speedMetersPerSecond)
     }
 
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Medir altavoces", style = MaterialTheme.typography.headlineSmall)
-        Text("Respuesta en frecuencia y retardo observado hasta el micrófono.", color = MeasureMuted, fontSize = 13.sp)
+        Text("Respuesta en frecuencia y diferencias de llegada entre fuentes respecto a una referencia.", color = MeasureMuted, fontSize = 13.sp)
         MeasurementPanel("SEÑAL CONOCIDA") {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = kind == MeasurementSignal.SWEEP, onClick = { kindName = MeasurementSignal.SWEEP.name }, enabled = !busy,
@@ -200,7 +210,7 @@ fun MeasurementScreen(
                 onSelect = { outputId = it; outputChosen = true },
             )
             if (outputs.none { it.kind in usbKinds }) Text("DAC USB no conectado. Selecciona explícitamente otra salida para una prueba.", color = MeasureMuted, fontSize = 12.sp)
-            if (bluetooth) Text("BLUETOOTH · EXPLORACIÓN. Su latencia puede variar entre medidas. El retardo incluye Bluetooth y el resto de la cadena; no es el delay puro del altavoz.", color = MeasureAmber, fontSize = 12.sp)
+            if (bluetooth) Text("BLUETOOTH · EXPLORACIÓN. Su latencia variable puede alterar la diferencia de llegada incluso con la misma ruta.", color = MeasureAmber, fontSize = 12.sp)
             Text("${if (kind == MeasurementSignal.SWEEP) "Barrido de $duration s" else "5 pulsos de 80 ms"} · ${lowText}–${highText} Hz · ${measurementNumber(level.toDouble(), 0)} dBFS\n${if (inputMissing) "Entrada USB desconectada" else selectedInput?.name ?: "Micrófono interno"} → ${selectedOutput?.name ?: "selecciona salida"}", fontSize = 12.sp)
             Button(onClick = { config?.let { measurement -> selectedOutput?.let { outputChosen = true; onMeasure(measurement, inputId, it.id) } } },
                 enabled = !busy && !inputMissing && config != null && selectedOutput != null, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Emitir y medir") }
@@ -218,17 +228,41 @@ fun MeasurementScreen(
         }
         state.result?.let { result ->
             MeasurementPanel(if (state.syntheticResult) "SIMULACIÓN · DATOS SINTÉTICOS" else "ÚLTIMO RESULTADO") {
-                Text(if (result.valid) "Retardo observado: ${measurementNumber(result.delayMs)} ms" else "MEDIDA NO VÁLIDA · revisa los motivos",
-                    color = if (result.valid) MeasureAccent else MaterialTheme.colorScheme.error, fontSize = 19.sp, fontWeight = FontWeight.Bold)
-                if (result.valid) Text("Equivalente temporal: ${measurementNumber(result.delayMs * state.speedMetersPerSecond / 1000.0)} m", fontSize = 13.sp)
-                Text("Incluye propagación acústica y latencias de reproducción, captura y procesado. Sin compensación validada, no representa el delay puro del altavoz.", color = MeasureMuted, fontSize = 12.sp)
+                val comparisonReason = when {
+                    referenceRecord == null -> "Guarda la fuente de referencia para comparar llegadas"
+                    referenceRecord.synthetic != state.syntheticResult -> "No se comparan medidas reales y sintéticas"
+                    state.resultComparisonKey == null || referenceRecord.comparisonKey != state.resultComparisonKey ->
+                        "La referencia y el último resultado tienen rutas o configuraciones de medida diferentes"
+                    else -> null
+                }
+                if (!result.valid) Text("MEDIDA NO VÁLIDA · revisa los motivos", color = MaterialTheme.colorScheme.error, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                else if (comparisonReason != null) Text(comparisonReason, color = MeasureAmber, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                else {
+                    val differenceMs = result.delayMs - referenceRecord!!.observedDelayMs
+                    Text("Δt respecto a $referenceName: ${measurementSigned(differenceMs)} ms", color = MeasureAccent, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                    Text("Δ equivalente: ${measurementSigned(differenceMs * state.speedMetersPerSecond / 1000.0)} m", fontSize = 15.sp)
+                    Text(when {
+                        abs(differenceMs) < 0.005 -> "Llegada coincidente con la referencia"
+                        differenceMs > 0.0 -> "Llega después de $referenceName"
+                        else -> "Llega antes de $referenceName"
+                    }, color = MeasureMuted, fontSize = 12.sp)
+                }
+                Text("Con la misma cadena y el micrófono fijo, la latencia común se anula en la diferencia si permanece estable.", color = MeasureMuted, fontSize = 12.sp)
+                if (referenceRecord?.bluetooth == true) Text("La referencia usa Bluetooth: su latencia variable puede modificar Δt entre medidas.", color = MeasureAmber, fontSize = 12.sp)
                 Text("Pico / ruido: ${measurementNumber(result.peakToNoiseDb, 1)} dB · correlación: ${measurementNumber(result.normalizedCorrelation, 3)}", fontFamily = FontFamily.Monospace, fontSize = 12.sp)
                 if (result.polarityInverted) Text("Llegada con polaridad invertida", color = MeasureAmber, fontSize = 12.sp)
-                if (result.candidateDelaysMs.size > 1) Text("Candidatos: ${result.candidateDelaysMs.take(6).joinToString(" / ") { measurementNumber(it) }} ms · posibles reflexiones", color = MeasureAmber, fontSize = 12.sp)
-                if (state.repeatDelaysMs.isNotEmpty() && result.valid) Text("Repeticiones: ${state.repeatDelaysMs.joinToString(" / ") { measurementNumber(it) }} ms", color = MeasureMuted, fontSize = 12.sp)
-                else if (state.repeatDelaysMs.isNotEmpty()) Text("Serie descartada: revisa los controles de calidad y repetibilidad.", color = MeasureAmber, fontSize = 12.sp)
                 state.spreadMs?.let { Text("Dispersión entre repeticiones: ${measurementNumber(it)} ms", color = MeasureMuted, fontSize = 12.sp) }
                 result.warnings.forEach { Text("• $it", color = MeasureAmber, fontSize = 12.sp) }
+                TextButton(onClick = { resultDiagnostics = !resultDiagnostics }, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(if (resultDiagnostics) "Cerrar diagnóstico de tiempos del sistema" else "Ver diagnóstico de tiempos del sistema")
+                }
+                if (resultDiagnostics) {
+                    if (result.valid) Text("Tiempo observado del sistema: ${measurementNumber(result.delayMs)} ms", fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                    Text("Conserva las latencias de reproducción, captura y procesado junto a la propagación acústica. Los datos originales no se desplazan al cambiar de referencia.", color = MeasureMuted, fontSize = 12.sp)
+                    if (result.candidateDelaysMs.size > 1) Text("Candidatos del sistema: ${result.candidateDelaysMs.take(6).joinToString(" / ") { measurementNumber(it) }} ms · posibles reflexiones", color = MeasureAmber, fontSize = 12.sp)
+                    if (state.repeatDelaysMs.isNotEmpty() && result.valid) Text("Repeticiones del sistema: ${state.repeatDelaysMs.joinToString(" / ") { measurementNumber(it) }} ms", color = MeasureMuted, fontSize = 12.sp)
+                    else if (state.repeatDelaysMs.isNotEmpty()) Text("Serie descartada: revisa los controles de calidad y repetibilidad.", color = MeasureAmber, fontSize = 12.sp)
+                }
                 MeasurementMenu(label = "Guardar en Fuente $targetSlot", enabled = !busy,
                     choices = state.slots.map { it.number to "${it.name}${if (it.measurement == null) " · libre" else " · ocupada"}" },
                     onSelect = { if (it != null) targetSlot = it })
@@ -240,20 +274,20 @@ fun MeasurementScreen(
             }
         }
         MeasurementPanel("MATRIZ · 10 FUENTES") {
-            Text("Guarda cada altavoz sin mover el micrófono. Los metros son equivalentes al tiempo, no una distancia geométrica medida.", color = MeasureMuted, fontSize = 12.sp)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = !differences, onClick = { differences = false }, label = { Text("Tiempos") }, modifier = Modifier.heightIn(min = 48.dp))
+            Text("Diferencias de llegada entre fuentes respecto a la referencia. Mantén la misma cadena y el micrófono fijo. Los metros equivalen a la diferencia temporal.", color = MeasureMuted, fontSize = 12.sp)
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = differences, onClick = { differences = true }, label = { Text("Diferencias") }, modifier = Modifier.heightIn(min = 48.dp))
+                FilterChip(selected = !differences, onClick = { differences = false }, label = { Text("Tiempos del sistema") }, modifier = Modifier.heightIn(min = 48.dp))
             }
             MeasurementMenu(label = "Referencia: $referenceName", enabled = !busy,
-                choices = state.slots.map { it.number to "${it.name}${if (it.measurement == null) " · sin registro" else ""}" },
+                choices = state.slots.map { it.number to "${it.name}${if (it.measurement == null) " · sin registro" else " · con registro"}" },
                 onSelect = { if (it != null) onReference(it) })
             if (differences) Text("Δ = fuente − $referenceName. Positivo: llega después. Se comparan solo registros con condiciones compatibles.", color = MeasureMuted, fontSize = 12.sp)
             if (state.slots.any { it.measurement?.bluetooth == true }) Text("Los registros Bluetooth incluyen una latencia variable. Sus diferencias temporales son exploratorias.", color = MeasureAmber, fontSize = 12.sp)
             Column(Modifier.horizontalScroll(rememberScrollState())) {
                 Row(Modifier.padding(vertical = 8.dp)) {
                     Text("Fuente / estado", color = MeasureMuted, fontSize = 12.sp, modifier = Modifier.width(162.dp))
-                    Text(if (differences) "Δ ms" else "ms observados", color = MeasureMuted, fontSize = 12.sp, modifier = Modifier.width(116.dp))
+                    Text(if (differences) "Δ ms" else "ms del sistema", color = MeasureMuted, fontSize = 12.sp, modifier = Modifier.width(116.dp))
                     Text(if (differences) "Δ m equivalentes" else "m equivalentes", color = MeasureMuted, fontSize = 12.sp, modifier = Modifier.width(125.dp))
                 }
                 state.slots.forEach { slot ->
@@ -270,8 +304,14 @@ fun MeasurementScreen(
                             Text(when { slot.measurement == null -> "Sin registro"; slot.measurement.synthetic -> "SIMULACIÓN"; slot.measurement.bluetooth -> "Bluetooth · exploración"; else -> "Registro real" },
                                 color = if (slot.measurement?.synthetic == true || slot.measurement?.bluetooth == true) MeasureAmber else MeasureMuted, fontSize = 11.sp)
                         }
-                        Text(time?.let { measurementNumber(it) } ?: "—", fontFamily = FontFamily.Monospace, modifier = Modifier.width(116.dp))
-                        Text(meters?.let { measurementNumber(it) } ?: "—", fontFamily = FontFamily.Monospace, modifier = Modifier.width(125.dp))
+                        val timeText = time?.let { if (differences) measurementSigned(it) else measurementNumber(it) } ?: "—"
+                        val metersText = meters?.let { if (differences) measurementSigned(it) else measurementNumber(it) } ?: "—"
+                        Text(timeText, fontFamily = FontFamily.Monospace, modifier = Modifier.width(116.dp).semantics {
+                            contentDescription = "${slot.name}: ${if (differences) "diferencia" else "tiempo del sistema"} $timeText ms"
+                        })
+                        Text(metersText, fontFamily = FontFamily.Monospace, modifier = Modifier.width(125.dp).semantics {
+                            contentDescription = "${slot.name}: ${if (differences) "diferencia" else "equivalente"} $metersText m"
+                        })
                     }
                     if (differences && slot.measurement != null && comparison?.comparable != true) {
                         Text("${slot.name}: ${comparison?.reason ?: "sin referencia comparable"}", color = MeasureAmber, fontSize = 11.sp, modifier = Modifier.width(403.dp).padding(bottom = 8.dp))
@@ -289,7 +329,6 @@ fun MeasurementScreen(
             OutlinedButton(onClick = onExport, enabled = !busy && state.slots.any { it.measurement != null }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Exportar matriz y espectros") }
         }
         val selectedRecord = state.slots.firstOrNull { it.number == curveSlot }?.measurement
-        val referenceRecord = state.slots.firstOrNull { it.number == state.reference }?.measurement
         val curveFrequency = selectedRecord?.frequenciesHz ?: state.result?.frequenciesHz
         val curveMagnitude = selectedRecord?.magnitudeDb ?: state.result?.magnitudeDb
         MeasurementPanel("RESPUESTA EN FRECUENCIA · MAGNITUD RELATIVA") {

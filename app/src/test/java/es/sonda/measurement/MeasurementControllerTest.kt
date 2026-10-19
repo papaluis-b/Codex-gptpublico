@@ -75,6 +75,7 @@ class MeasurementControllerTest {
         controller.save(3)
         val saved = awaitState(controller) { it.slots[2].measurement != null }.slots[2].measurement!!
         assertTrue(saved.synthetic)
+        assertEquals(saved.comparisonKey, completed.resultComparisonKey)
         assertEquals(completed.result.delayMs, saved.observedDelayMs, 0.0)
         assertArrayEquals(completed.result.frequenciesHz, saved.frequenciesHz, 0.0)
         controller.close()

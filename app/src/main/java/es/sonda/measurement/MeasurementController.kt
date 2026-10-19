@@ -76,7 +76,7 @@ class MeasurementController(context: Context, private val releaseTimeoutMs: Long
         stop("Preparando nueva medida")
         val ticket = generation.get()
         pending = emptyList()
-        _state.update { it.copy(busy = true, result = null, canSave = false, syntheticResult = false,
+        _state.update { it.copy(busy = true, result = null, resultComparisonKey = null, canSave = false, syntheticResult = false,
             repeatDelaysMs = emptyList(), spreadMs = null, message = "Preparando señal y liberando el analizador…") }
         job = scope.launch {
             try {
@@ -139,12 +139,13 @@ class MeasurementController(context: Context, private val releaseTimeoutMs: Long
         val result = representative.result.copy(valid = valid, warnings = warnings.distinct())
         pending = if (valid) listOf(representative.copy(result = result)) + outcomes.filter { it !== representative } else emptyList()
         _state.update { it.copy(busy = false, result = result, canSave = valid,
+            resultComparisonKey = if (valid) comparisonKey(representative) else null,
             syntheticResult = representative.synthetic, repeatDelaysMs = outcomes.map { o -> o.result.delayMs },
             spreadMs = if (outcomes.size > 1) spread else null,
             message = when {
                 !valid -> "Medida no válida para registrar. Revisa los motivos y vuelve a medir."
                 representative.synthetic -> "SIMULACIÓN · ejemplo generado, sin micrófono ni emisión física"
-                else -> "Medida terminada · retardo observado, sin compensación de instrumento"
+                else -> "Medida terminada · guarda la fuente y compara su llegada con la referencia"
             }) }
     }
 
@@ -153,7 +154,7 @@ class MeasurementController(context: Context, private val releaseTimeoutMs: Long
         stop("Preparando simulación")
         val ticket = generation.get()
         pending = emptyList()
-        _state.update { it.copy(busy = true, canSave = false, result = null, syntheticResult = true,
+        _state.update { it.copy(busy = true, canSave = false, result = null, resultComparisonKey = null, syntheticResult = true,
             repeatDelaysMs = emptyList(), spreadMs = null, message = "SIMULACIÓN · calculando respuesta conocida") }
         job = scope.launch {
             try {
